@@ -1,0 +1,21 @@
+
+> kiosco-school-backend@1.0.0 dev
+> nodemon src/server.js
+
+[33m[nodemon] 3.1.14[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): *.*[39m
+[33m[nodemon] watching extensions: js,mjs,cjs,json[39m
+[32m[nodemon] starting `node src/server.js`[39m
+MongoDB connected
+Server running on 4000
+[0mGET /health [32m200[0m 4.491 ms - 15[0m
+[0mPOST /api/v1/auth/login [33m400[0m 4.632 ms - 1440[0m
+[0mPOST /api/v1/auth/login [33m400[0m 1.593 ms - 1440[0m
+[0mPOST /api/v1/auth/login [33m400[0m 0.712 ms - 1440[0m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] restarting due to changes...[39m
+[32m[nodemon] starting `node src/server.js`[39m
+MongoDB connected
+Server running on 4000
+[0mPOST /api/v1/auth/login [32m200[0m 349.161 ms - 493[0m
