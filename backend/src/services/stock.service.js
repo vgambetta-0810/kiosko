@@ -46,6 +46,10 @@ exports.withTransaction = async (handler) => {
       result = await handler(session);
     });
     return result;
+  } catch (error) {
+    const noTxnSupport = String(error?.message || '').includes('Transaction numbers are only allowed on a replica set member or mongos');
+    if (!noTxnSupport) throw error;
+    return handler(null);
   } finally {
     await session.endSession();
   }
