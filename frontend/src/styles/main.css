@@ -7,6 +7,6 @@
 body { margin: 0; font-family: 'Segoe UI', sans-serif; background: linear-gradient(180deg, #eef2ff, var(--bg)); color: var(--text); }
 .page { max-width: 900px; margin: 32px auto; padding: 16px; }
 .card { display: flex; flex-direction: column; gap: 10px; background: var(--card); border-radius: 12px; padding: 16px; box-shadow: 0 8px 24px rgba(0,0,0,.08); }
-input, button, a { padding: 10px; border-radius: 8px; border: 1px solid #d1d5db; }
+input, select, button, a { padding: 10px; border-radius: 8px; border: 1px solid #d1d5db; }
 button { background: var(--accent); color: #fff; border: none; cursor: pointer; }
 a { text-align: center; text-decoration: none; }
