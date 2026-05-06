@@ -18,7 +18,7 @@ exports.createReservation = async ({ client, items, paidAmount = 0, expiresAt, u
         productId: item.product,
         type: movementType,
         quantity: item.quantity,
-        reason: 'Reservation',
+        reason: 'RESERVATION',
         referenceType: 'Reservation',
         referenceId: reservation._id,
         userId,
@@ -56,7 +56,7 @@ exports.expireReservations = async () => {
             productId: item.product,
             type: 'RETURN',
             quantity: item.quantity,
-            reason: 'Reservation return after grace',
+            reason: 'EXPIRED',
             referenceType: 'Reservation',
             referenceId: reservation._id,
             session

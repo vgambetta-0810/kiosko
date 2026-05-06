@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 
 export default function AdminDashboard() {
@@ -7,6 +8,9 @@ export default function AdminDashboard() {
   return (
     <div className="page">
       <h1>Admin Dashboard</h1>
+      <nav>
+        <Link to="/stock">Stock Management</Link>
+      </nav>
       <p>Products: {products.length}</p>
       <ul>{products.map((p) => <li key={p._id}>{p.name} - Stock: {p.stock}</li>)}</ul>
     </div>

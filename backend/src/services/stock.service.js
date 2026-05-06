@@ -5,7 +5,7 @@ const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { roles } = require('../constants/enums');
 
-exports.adjustStock = async ({ productId, type, quantity, reason, referenceType, referenceId, userId, session }) => {
+exports.adjustStock = async ({ productId, type, quantity, reason, note, referenceType, referenceId, userId, session }) => {
   const delta = type === 'IN' || type === 'RETURN' ? quantity : -quantity;
   const product = await Product.findById(productId).session(session);
   if (!product) throw new Error('Product not found');
@@ -15,7 +15,7 @@ exports.adjustStock = async ({ productId, type, quantity, reason, referenceType,
   await product.save({ session });
 
   await StockMovement.create(
-    [{ product: productId, type, quantity, reason, referenceType, referenceId, createdBy: userId }],
+    [{ productId: productId, type, quantity, reason, note, referenceType, referenceId, createdBy: userId }],
     { session }
   );
 

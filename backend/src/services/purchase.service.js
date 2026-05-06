@@ -19,7 +19,7 @@ exports.createPurchase = async ({ supplier, items, createdBy }) =>
         productId: item.product,
         type: 'IN',
         quantity: item.quantity,
-        reason: 'Purchase',
+        reason: 'PURCHASE',
         referenceType: 'Purchase',
         referenceId: purchase._id,
         userId: createdBy,

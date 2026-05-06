@@ -23,7 +23,7 @@ exports.createSale = async ({ client, items, discount = 0, paymentMethod, create
         productId: item.product,
         type: 'OUT',
         quantity: item.quantity,
-        reason: 'Sale',
+        reason: 'SALE',
         referenceType: 'Sale',
         referenceId: sale._id,
         userId: createdBy,
