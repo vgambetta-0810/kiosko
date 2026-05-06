@@ -19,7 +19,7 @@ exports.movementsByOwner = asyncHandler(async (req, res) => {
     if (ownerType !== 'CLIENT') throw new ApiError(403, 'Forbidden');
     if (req.user.role === 'CLIENT' && req.user._id.toString() !== ownerId) throw new ApiError(403, 'Forbidden');
     if (req.user.role === 'PARENT') {
-      const child = await User.findOne({ _id: ownerId, parent: req.user._id, role: 'CLIENT' });
+      const child = await User.findOne({ _id: ownerId, parentId: req.user._id, role: 'CLIENT' });
       if (!child) throw new ApiError(403, 'Forbidden');
     }
   }

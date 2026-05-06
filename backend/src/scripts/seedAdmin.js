@@ -1,17 +1,11 @@
 require('dotenv').config();
-const bcrypt = require('bcryptjs');
 const connectDB = require('../config/db');
-const User = require('../models/User');
+const { ensureDefaultAdmin } = require('../services/bootstrap.service');
 
 (async () => {
   await connectDB();
-  const email = 'admin@kiosco.com';
-  const exists = await User.findOne({ email });
-  if (!exists) {
-    await User.create({ name: 'Admin', email, password: await bcrypt.hash('admin1234', 10), role: 'ADMIN' });
-    console.log('Admin created: admin@kiosco.com / admin1234');
-  } else {
-    console.log('Admin already exists');
-  }
+  const result = await ensureDefaultAdmin();
+  if (result.created) console.log(`Admin created: ${result.email} / ${process.env.DEFAULT_ADMIN_PASSWORD || '1234'}`);
+  else console.log('Admin already exists');
   process.exit(0);
 })();

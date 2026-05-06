@@ -6,12 +6,16 @@ exports.registerSchema = Joi.object({
   password: Joi.string().min(6).required(),
   role: Joi.string().valid('ADMIN', 'SELLER', 'CLIENT', 'PARENT').default('CLIENT'),
   age: Joi.number().integer().min(0).max(120).optional(),
-  parent: Joi.string().hex().length(24).optional().allow(null)
+  parentId: Joi.string().hex().length(24).optional().allow(null)
 });
 
 exports.loginSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().required()
+});
+
+exports.googleSchema = Joi.object({
+  idToken: Joi.string().required()
 });
 
 exports.productSchema = Joi.object({

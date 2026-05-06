@@ -11,7 +11,7 @@ exports.list = asyncHandler(async (req, res) => {
   let filter = {};
   if (req.user.role === 'CLIENT') filter = { client: req.user._id };
   if (req.user.role === 'PARENT') {
-    const children = await User.find({ parent: req.user._id, role: 'CLIENT' }).select('_id');
+    const children = await User.find({ parentId: req.user._id, role: 'CLIENT' }).select('_id');
     filter = { client: { $in: children.map((c) => c._id) } };
   }
   res.json(await Reservation.find(filter).populate('items.product client'));
