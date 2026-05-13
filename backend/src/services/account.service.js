@@ -1,9 +1,9 @@
 const { Account, AccountMovement } = require('../models/Account');
 
 exports.getOrCreateAccount = async (ownerType, ownerId, session) => {
-  let account = await Account.findOne({ ownerType, ownerId }).session(session);
+  let account = await Account.findOne({ where: { ownerType, ownerId }, transaction: session });
   if (!account) {
-    [account] = await Account.create([{ ownerType, ownerId, balance: 0 }], { session });
+    account = await Account.create({ ownerType, ownerId, balance: 0 }, { transaction: session });
   }
   return account;
 };
@@ -12,11 +12,11 @@ exports.addMovement = async ({ ownerType, ownerId, type, amount, status = 'CONFI
   const account = await exports.getOrCreateAccount(ownerType, ownerId, session);
   const sign = type === 'DEBT' ? 1 : -1;
   account.balance += sign * amount;
-  await account.save({ session });
+  await account.save({ transaction: session });
 
-  const [movement] = await AccountMovement.create(
-    [{ account: account._id, type, amount, status, notes, createdBy }],
-    { session }
+  const movement = await AccountMovement.create(
+    { accountId: account.id, type, amount, status, notes, createdById: createdBy },
+    { transaction: session }
   );
 
   return { account, movement };

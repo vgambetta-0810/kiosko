@@ -1,7 +1,12 @@
-const Product = require('../models/Product');
 const asyncHandler = require('../utils/asyncHandler');
+const Product = require('../models/Product');
 
 exports.create = asyncHandler(async (req, res) => res.status(201).json(await Product.create(req.body)));
-exports.list = asyncHandler(async (_req, res) => res.json(await Product.find()));
-exports.update = asyncHandler(async (req, res) => res.json(await Product.findByIdAndUpdate(req.params.id, req.body, { new: true })));
-exports.remove = asyncHandler(async (req, res) => { await Product.findByIdAndDelete(req.params.id); res.status(204).send(); });
+exports.list = asyncHandler(async (_req, res) => res.json(await Product.findAll()));
+exports.update = asyncHandler(async (req, res) => {
+  const product = await Product.findByPk(req.params.id);
+  if (!product) return res.status(404).json({ message: 'Not found' });
+  await product.update(req.body);
+  res.json(product);
+});
+exports.remove = asyncHandler(async (req, res) => { await Product.destroy({ where: { id: req.params.id } }); res.status(204).send(); });
