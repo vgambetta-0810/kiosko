@@ -6,7 +6,7 @@ const User = require('../models/User');
 (async () => {
   await connectDB();
   const email = 'admin@kiosco.com';
-  const exists = await User.findOne({ email });
+  const exists = await User.findOne({ where: { email } });
   if (!exists) {
     await User.create({ name: 'Admin', email, password: await bcrypt.hash('admin1234', 10), role: 'ADMIN' });
     console.log('Admin created: admin@kiosco.com / admin1234');

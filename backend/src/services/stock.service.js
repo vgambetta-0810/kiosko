@@ -1,36 +1,33 @@
-const mongoose = require('mongoose');
+const { sequelize } = require('../config/db');
 const Product = require('../models/Product');
 const StockMovement = require('../models/StockMovement');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { roles } = require('../constants/enums');
 
-exports.adjustStock = async ({ productId, type, quantity, reason, referenceType, referenceId, userId, session }) => {
+exports.adjustStock = async ({ productId, type, quantity, reason, referenceType, referenceId, userId, session: transaction }) => {
   const delta = type === 'IN' || type === 'RETURN' ? quantity : -quantity;
-  const product = await Product.findById(productId).session(session);
+  const product = await Product.findByPk(productId, { transaction });
   if (!product) throw new Error('Product not found');
   if (product.stock + delta < 0) throw new Error(`Insufficient stock for ${product.name}`);
 
   product.stock += delta;
-  await product.save({ session });
+  await product.save({ transaction });
 
-  await StockMovement.create(
-    [{ product: productId, type, quantity, reason, referenceType, referenceId, createdBy: userId }],
-    { session }
-  );
+  await StockMovement.create({ productId, type, quantity, reason, referenceType, referenceId, createdById: userId }, { transaction });
 
   const threshold = Number(process.env.LOW_STOCK_THRESHOLD || 10);
   if (product.stock <= threshold) {
-    const admins = await User.find({ role: roles.ADMIN, isActive: true }).session(session);
+    const admins = await User.findAll({ where: { role: roles.ADMIN, isActive: true }, transaction });
     if (admins.length) {
-      await Notification.insertMany(
+      await Notification.bulkCreate(
         admins.map((admin) => ({
-          user: admin._id,
+          userId: admin.id,
           title: 'Low stock alert',
           message: `${product.name} has low stock (${product.stock})`,
           type: 'LOW_STOCK'
         })),
-        { session }
+        { transaction }
       );
     }
   }
@@ -39,14 +36,5 @@ exports.adjustStock = async ({ productId, type, quantity, reason, referenceType,
 };
 
 exports.withTransaction = async (handler) => {
-  const session = await mongoose.startSession();
-  try {
-    let result;
-    await session.withTransaction(async () => {
-      result = await handler(session);
-    });
-    return result;
-  } finally {
-    await session.endSession();
-  }
+  return sequelize.transaction(async (transaction) => handler(transaction));
 };

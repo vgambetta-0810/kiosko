@@ -3,27 +3,27 @@ const Product = require('../models/Product');
 const { withTransaction, adjustStock } = require('./stock.service');
 
 exports.createPurchase = async ({ supplier, items, createdBy }) =>
-  withTransaction(async (session) => {
+  withTransaction(async (transaction) => {
     let total = 0;
     for (const item of items) {
-      const product = await Product.findById(item.product).session(session);
+      const product = await Product.findByPk(item.product, { transaction });
       if (!product) throw new Error('Product not found');
       total += item.quantity * item.cost;
     }
 
-    const [purchase] = await Purchase.create([{ supplier, items, total, createdBy }], { session });
+    const purchase = await Purchase.create({ supplierId: supplier, items, total, createdById: createdBy }, { transaction });
 
     for (const item of items) {
-      await Product.findByIdAndUpdate(item.product, { $set: { cost: item.cost } }, { session });
+      await Product.update({ cost: item.cost }, { where: { id: item.product }, transaction });
       await adjustStock({
         productId: item.product,
         type: 'IN',
         quantity: item.quantity,
         reason: 'Purchase',
         referenceType: 'Purchase',
-        referenceId: purchase._id,
+        referenceId: purchase.id,
         userId: createdBy,
-        session
+        session: transaction
       });
     }
 

@@ -18,7 +18,7 @@ exports.google = authService.passport.authenticate('google', { scope: ['profile'
 exports.googleCallback = [
   authService.passport.authenticate('google', { session: false }),
   (req, res) => {
-    const token = require('../utils/jwt').signToken({ sub: req.user._id, role: req.user.role });
+    const token = require('../utils/jwt').signToken({ sub: req.user.id, role: req.user.role });
     res.redirect(`${process.env.FRONTEND_URL}/oauth-success?token=${token}`);
   }
 ];

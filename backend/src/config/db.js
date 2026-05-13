@@ -1,6 +1,19 @@
-const mongoose = require('mongoose');
+const path = require('path');
+const { Sequelize } = require('sequelize');
 
-module.exports = async () => {
-  await mongoose.connect(process.env.MONGODB_URI);
-  console.log('MongoDB connected');
+const storage = process.env.SQLITE_PATH || path.join(__dirname, '../../data.sqlite');
+
+const sequelize = new Sequelize({
+  dialect: 'sqlite',
+  storage,
+  logging: false
+});
+
+const connectDB = async () => {
+  await sequelize.authenticate();
+  await sequelize.sync();
+  console.log('SQLite connected');
 };
+
+module.exports = connectDB;
+module.exports.sequelize = sequelize;

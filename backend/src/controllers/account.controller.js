@@ -7,7 +7,7 @@ const User = require('../models/User');
 
 exports.addMovement = asyncHandler(async (req, res) => {
   const result = await withTransaction((session) =>
-    addMovement({ ...req.body, createdBy: req.user._id, session })
+    addMovement({ ...req.body, createdBy: req.user.id, session })
   );
   res.status(201).json(result);
 });
@@ -17,13 +17,13 @@ exports.movementsByOwner = asyncHandler(async (req, res) => {
   const isAdminOrSeller = ['ADMIN', 'SELLER'].includes(req.user.role);
   if (!isAdminOrSeller) {
     if (ownerType !== 'CLIENT') throw new ApiError(403, 'Forbidden');
-    if (req.user.role === 'CLIENT' && req.user._id.toString() !== ownerId) throw new ApiError(403, 'Forbidden');
+    if (req.user.role === 'CLIENT' && req.user.id !== ownerId) throw new ApiError(403, 'Forbidden');
     if (req.user.role === 'PARENT') {
-      const child = await User.findOne({ _id: ownerId, parent: req.user._id, role: 'CLIENT' });
+      const child = await User.findOne({ where: { id: ownerId, parentId: req.user.id, role: 'CLIENT' } });
       if (!child) throw new ApiError(403, 'Forbidden');
     }
   }
   const account = await getOrCreateAccount(ownerType, ownerId);
-  const movements = await AccountMovement.find({ account: account._id });
+  const movements = await AccountMovement.findAll({ where: { accountId: account.id } });
   res.json({ account, movements });
 });
