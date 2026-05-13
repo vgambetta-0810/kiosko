@@ -24,8 +24,11 @@ exports.optionalAuth = async (req, _res, next) => {
   const token = header.split(' ')[1];
   try {
     const payload = verifyToken(token);
-    const user = await User.findById(payload.userId || payload.sub);
-    if (user && user.isActive) req.user = user;
+    const user = await User.findByPk(payload.userId || payload.sub);
+    if (user && user.isActive) {
+      user._id = user.id;
+      req.user = user;
+    }
   } catch (_e) {
     // ignore optional auth errors
   }
