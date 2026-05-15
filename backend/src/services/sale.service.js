@@ -8,8 +8,8 @@ exports.createSale = async ({ client, items, discount = 0, paymentMethod, create
     let subtotal = 0;
     for (const item of items) {
       const product = await Product.findByPk(item.product, { transaction });
-      if (!product) throw new Error('Product not found');
-      if (product.stock < item.quantity) throw new Error(`Insufficient stock for ${product.name}`);
+      if (!product) throw new Error('Producto no encontrado');
+      if (product.stock < item.quantity) throw new Error(`Stock insuficiente para ${product.name}`);
       subtotal += item.quantity * product.price;
       item.price = product.price;
     }
@@ -23,8 +23,8 @@ exports.createSale = async ({ client, items, discount = 0, paymentMethod, create
         productId: item.product,
         type: 'OUT',
         quantity: item.quantity,
-        reason: 'Sale',
-        referenceType: 'Sale',
+        reason: 'Venta',
+        referenceType: 'Venta',
         referenceId: sale.id,
         userId: createdBy,
         session: transaction
@@ -32,7 +32,7 @@ exports.createSale = async ({ client, items, discount = 0, paymentMethod, create
     }
 
     if (client && paymentMethod === 'CASH') {
-      await addMovement({ ownerType: 'CLIENT', ownerId: client, type: 'DEBT', amount: total, createdBy, session: transaction, notes: 'Fiado sale' });
+      await addMovement({ ownerType: 'CLIENT', ownerId: client, type: 'DEBT', amount: total, createdBy, session: transaction, notes: 'Venta fiada' });
     }
 
     return sale;

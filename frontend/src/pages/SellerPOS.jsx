@@ -63,7 +63,7 @@ export default function SellerPOS() {
   const removeItem = (productId) => setCart((prev) => prev.filter((i) => i.productId !== productId));
 
   const submitSale = async () => {
-    if (!cart.length) return setMessage('Add at least one product');
+    if (!cart.length) return setMessage('Agrega al menos un producto');
     setLoading(true);
     setMessage('');
     try {
@@ -79,11 +79,11 @@ export default function SellerPOS() {
       setClientId('');
       setStatus('PAID');
       setPaymentMethod('CASH');
-      setMessage('Sale registered successfully');
+      setMessage('Venta registrada correctamente');
       const productsRes = await api.get('/products');
       setProducts(productsRes.data.filter((p) => p.isActive));
     } catch (error) {
-      setMessage(error?.response?.data?.message || 'Failed to register sale');
+      setMessage(error?.response?.data?.message || 'No se pudo registrar la venta');
     } finally {
       setLoading(false);
     }
@@ -91,10 +91,10 @@ export default function SellerPOS() {
 
   return (
     <div className="page">
-      <h1>Seller POS</h1>
+      <h1>Punto de venta</h1>
       <div className="card">
         <input
-          placeholder="Search product by name"
+          placeholder="Buscar producto por nombre"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           onKeyDown={(e) => {
@@ -109,7 +109,7 @@ export default function SellerPOS() {
           ))}
         </div>
 
-        <h3>Cart</h3>
+        <h3>Carrito</h3>
         {cart.map((item) => (
           <div key={item.productId} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px 40px', gap: '8px', alignItems: 'center' }}>
             <span>{item.name} (${item.price})</span>
@@ -126,12 +126,12 @@ export default function SellerPOS() {
         ))}
 
         <label>
-          Discount
+          Descuento
           <input type="number" min="0" max={subtotal} value={discount} onChange={(e) => setDiscount(e.target.value)} />
         </label>
 
         <label>
-          Payment Method
+          Método de pago
           <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)}>
             <option value="CASH">CASH</option>
             <option value="TRANSFER">TRANSFER</option>
@@ -141,17 +141,17 @@ export default function SellerPOS() {
         </label>
 
         <label>
-          Sale Type
+          Tipo de venta
           <select value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="PAID">Paid</option>
-            <option value="PENDING">Fiado (Pending)</option>
+            <option value="PAID">Pagada</option>
+            <option value="PENDING">Fiado (Pendiente)</option>
           </select>
         </label>
 
         <label>
-          Client (optional, required for fiado)
+          Cliente (opcional, obligatorio para fiado)
           <select value={clientId} onChange={(e) => setClientId(e.target.value)}>
-            <option value="">No client</option>
+            <option value="">Sin cliente</option>
             {clients.map((c) => (
               <option key={c._id} value={c._id}>
                 {c.name} ({c.email})
@@ -161,9 +161,9 @@ export default function SellerPOS() {
         </label>
 
         <div>Subtotal: ${subtotal.toFixed(2)}</div>
-        <div>Final total: ${finalTotal.toFixed(2)}</div>
+        <div>Total final: ${finalTotal.toFixed(2)}</div>
 
-        <button onClick={submitSale} disabled={loading}>{loading ? 'Saving...' : 'Confirm sale'}</button>
+        <button onClick={submitSale} disabled={loading}>{loading ? 'Guardando...' : 'Confirmar venta'}</button>
         {message ? <small>{message}</small> : null}
       </div>
     </div>

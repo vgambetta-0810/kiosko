@@ -37,15 +37,15 @@ export default function StockDashboard() {
 
   return (
     <div className="page">
-      <h1>Stock Management</h1>
+      <h1>Gestión de stock</h1>
       <div className="card">
-        <h2>Products</h2>
+        <h2>Productos</h2>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th>Name</th>
+              <th>Nombre</th>
               <th>Stock</th>
-              <th>Actions</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -54,7 +54,7 @@ export default function StockDashboard() {
                 <td>{p.name}</td>
                 <td style={{ color: p.stock <= 10 ? 'red' : 'green' }}>{p.stock}</td>
                 <td>
-                  <button onClick={() => loadMovements(p._id)}>View History</button>
+                  <button onClick={() => loadMovements(p._id)}>Ver historial</button>
                 </td>
               </tr>
             ))}

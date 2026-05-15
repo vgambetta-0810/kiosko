@@ -10,7 +10,7 @@ exports.list = asyncHandler(async (_req, res) =>
 
 exports.getProductStock = asyncHandler(async (req, res) => {
   const product = await Product.findByPk(req.params.id);
-  if (!product) return res.status(404).json({ message: 'Product not found' });
+  if (!product) return res.status(404).json({ message: 'Producto no encontrado' });
   const movements = await StockMovement.findAll({
     where: { productId: product.id },
     include: [{ model: User, as: 'createdBy' }],

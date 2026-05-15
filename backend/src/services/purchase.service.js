@@ -7,7 +7,7 @@ exports.createPurchase = async ({ supplier, items, createdBy }) =>
     let total = 0;
     for (const item of items) {
       const product = await Product.findByPk(item.product, { transaction });
-      if (!product) throw new Error('Product not found');
+      if (!product) throw new Error('Producto no encontrado');
       total += item.quantity * item.cost;
     }
 

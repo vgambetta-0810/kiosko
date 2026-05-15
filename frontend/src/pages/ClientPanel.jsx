@@ -12,10 +12,10 @@ export default function ClientPanel() {
 
   return (
     <div className="page">
-      <h1>Client Panel</h1>
-      <h2>Reservations</h2>
+      <h1>Panel de cliente</h1>
+      <h2>Reservas</h2>
       <ul>{reservations.map((r) => <li key={r._id}>{r.status} - Total: {r.total}</li>)}</ul>
-      <h2>Notifications</h2>
+      <h2>Notificaciones</h2>
       <ul>{notifications.map((n) => <li key={n._id}>{n.message}</li>)}</ul>
     </div>
   );
