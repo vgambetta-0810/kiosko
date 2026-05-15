@@ -50,11 +50,11 @@ export default function StockDashboard() {
           </thead>
           <tbody>
             {products.map((p) => (
-              <tr key={p._id} style={{ borderBottom: '1px solid #ddd' }}>
+              <tr key={p.id} style={{ borderBottom: '1px solid #ddd' }}>
                 <td>{p.name}</td>
                 <td style={{ color: p.stock <= 10 ? 'red' : 'green' }}>{p.stock}</td>
                 <td>
-                  <button onClick={() => loadMovements(p._id)}>View History</button>
+                  <button onClick={() => loadMovements(p.id)}>View History</button>
                 </td>
               </tr>
             ))}

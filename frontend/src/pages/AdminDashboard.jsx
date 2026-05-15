@@ -12,7 +12,7 @@ export default function AdminDashboard() {
         <Link to="/stock">Stock Management</Link>
       </nav>
       <p>Products: {products.length}</p>
-      <ul>{products.map((p) => <li key={p._id}>{p.name} - Stock: {p.stock}</li>)}</ul>
+      <ul>{products.map((p) => <li key={p.id}>{p.name} - Stock: {p.stock}</li>)}</ul>
     </div>
   );
 }

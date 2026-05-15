@@ -22,7 +22,7 @@ export default function MovementHistory({ movements, selectedProduct, filters, o
         </thead>
         <tbody>
           {movements.map((m) => (
-            <tr key={m._id} style={{ borderBottom: '1px solid #ddd' }}>
+            <tr key={m.id} style={{ borderBottom: '1px solid #ddd' }}>
               <td>{new Date(m.createdAt).toLocaleString()}</td>
               <td>{m.type}</td>
               <td>{m.quantity}</td>
