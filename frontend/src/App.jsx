@@ -32,7 +32,9 @@ const Navigation = () => {
   if (!user || location.pathname === '/login' || location.pathname === '/register') return null;
 
   const links = [{ to: '/', label: 'Inicio' }];
-  if (user.role === 'ADMIN') links.push({ to: '/admin', label: 'Admin' }, { to: '/stock', label: 'Stock' }, { to: '/pos', label: 'POS' });
+  if (user.role === 'ADMIN') {
+    links.push({ to: '/admin', label: 'Admin' }, { to: '/inventario', label: 'Inventario' }, { to: '/pos', label: 'POS' });
+  }
   if (user.role === 'SELLER') links.push({ to: '/pos', label: 'POS' });
   if (user.role === 'CLIENT' || user.role === 'PARENT') links.push({ to: '/client', label: 'Panel' });
 
@@ -64,7 +66,8 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/admin" element={<Guard roles={["ADMIN"]}><AdminDashboard /></Guard>} />
-        <Route path="/stock" element={<Guard roles={["ADMIN"]}><StockDashboard /></Guard>} />
+        <Route path="/inventario" element={<Guard roles={["ADMIN"]}><StockDashboard /></Guard>} />
+        <Route path="/stock" element={<Navigate to="/inventario" replace />} />
         <Route path="/pos" element={<Guard roles={["ADMIN", "SELLER"]}><SellerPOS /></Guard>} />
         <Route path="/client" element={<Guard roles={["CLIENT", "PARENT"]}><ClientPanel /></Guard>} />
         <Route path="*" element={<Navigate to="/" replace />} />
