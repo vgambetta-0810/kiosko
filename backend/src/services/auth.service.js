@@ -32,13 +32,15 @@ passport.use(
 );
 
 exports.register = async ({ name, email, password, role, age, parent }) => {
+  const normalizedEmail = email.trim().toLowerCase();
   const hash = await bcrypt.hash(password, 10);
-  const user = await User.create({ name, email, password: hash, role, age, parentId: parent || null });
+  const user = await User.create({ name, email: normalizedEmail, password: hash, role, age, parentId: parent || null });
   return { user, token: signToken({ sub: user.id, role: user.role }) };
 };
 
 exports.login = async ({ email, password }) => {
-  const user = await User.findOne({ where: { email } });
+  const normalizedEmail = email.trim().toLowerCase();
+  const user = await User.findOne({ where: { email: normalizedEmail } });
   if (!user || !user.password) throw new ApiError(401, 'Invalid credentials');
   const ok = await bcrypt.compare(password, user.password);
   if (!ok) throw new ApiError(401, 'Invalid credentials');

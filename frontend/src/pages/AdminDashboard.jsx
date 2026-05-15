@@ -9,7 +9,7 @@ export default function AdminDashboard() {
     <div className="page">
       <h1>Admin Dashboard</h1>
       <nav>
-        <Link to="/stock">Stock Management</Link>
+        <Link to="/inventario">Gestion de inventario</Link>
       </nav>
       <p>Products: {products.length}</p>
       <ul>{products.map((p) => <li key={p._id}>{p.name} - Stock: {p.stock}</li>)}</ul>
