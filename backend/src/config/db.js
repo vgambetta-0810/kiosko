@@ -9,9 +9,29 @@ const sequelize = new Sequelize({
   logging: false
 });
 
+const ensureSchema = async () => {
+  const queryInterface = sequelize.getQueryInterface();
+  const productsTable = await queryInterface.describeTable('Products');
+
+  if (!productsTable.categoryId) {
+    await queryInterface.addColumn('Products', 'categoryId', {
+      type: Sequelize.UUID,
+      allowNull: true
+    });
+  }
+
+  if (!productsTable.codigoBarras) {
+    await queryInterface.addColumn('Products', 'codigoBarras', {
+      type: Sequelize.STRING,
+      allowNull: true
+    });
+  }
+};
+
 const connectDB = async () => {
   await sequelize.authenticate();
   await sequelize.sync();
+  await ensureSchema();
   console.log('SQLite connected');
 };
 
