@@ -17,10 +17,12 @@ export default function StockDashboard() {
   const [categories, setCategories] = useState([]);
   const [categoryLoading, setCategoryLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState([]);
+  const [categoryInput, setCategoryInput] = useState('');
   const [creatingProduct, setCreatingProduct] = useState(false);
   const [createError, setCreateError] = useState('');
   const LOW_STOCK_LIMIT = 10;
   const CRITICAL_STOCK_LIMIT = 5;
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -91,17 +93,25 @@ export default function StockDashboard() {
       const selectedCategoryName = currentSelection?.customOption
         ? String(currentSelection.label || '').trim()
         : String(currentSelection?.name || '').trim();
+      const typedCategoryName = String(categoryInput || '').trim();
+      const finalCategoryName = selectedCategoryName || typedCategoryName;
 
-      if (!selectedCategoryName) {
+      if (!finalCategoryName) {
         setCreateError('La categoria es obligatoria');
         setCreatingProduct(false);
         return;
       }
 
       let categoryId = currentSelection?.id;
+      if (!UUID_REGEX.test(String(categoryId || ''))) categoryId = null;
       if (!categoryId) {
-        const createdCategoryRes = await api.post('/categories', { name: selectedCategoryName });
-        categoryId = createdCategoryRes.data.id;
+        const existing = categories.find((c) => String(c.name || '').toLowerCase() === finalCategoryName.toLowerCase());
+        if (existing?.id) {
+          categoryId = existing.id;
+        } else {
+          const createdCategoryRes = await api.post('/categories', { name: finalCategoryName });
+          categoryId = createdCategoryRes.data.id;
+        }
       }
 
       await api.post('/products', {
@@ -115,6 +125,7 @@ export default function StockDashboard() {
 
       setNewProduct({ name: '', codigoBarras: '', price: '', cost: '', stock: '' });
       setSelectedCategory([]);
+      setCategoryInput('');
       const [productsRes, categoriesRes] = await Promise.all([
         api.get('/products'),
         api.get('/categories')
@@ -216,7 +227,7 @@ export default function StockDashboard() {
               </tr>
             </thead>
             <tbody>
-              {lowStockfilteredProducts.map((p) => (
+              {lowStockProducts.map((p) => (
                 <tr key={`low-${p.id || p._id}`} style={{ borderBottom: '1px solid #ddd' }}>
                   <td>{p.name}</td>
                   <td style={{ color: Number(p.stock) <= CRITICAL_STOCK_LIMIT ? 'darkred' : 'red', fontWeight: 700 }}>{p.stock}</td>
@@ -266,6 +277,7 @@ export default function StockDashboard() {
             labelKey="name"
             selected={selectedCategory}
             onChange={setSelectedCategory}
+            onInputChange={setCategoryInput}
             className="category-typeahead"
             newSelectionPrefix="Crear categoria: "
             placeholder="Categoria"
