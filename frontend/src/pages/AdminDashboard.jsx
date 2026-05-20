@@ -7,12 +7,12 @@ export default function AdminDashboard() {
   useEffect(() => { api.get('/products').then((r) => setProducts(r.data)); }, []);
   return (
     <div className="page">
-      <h1>Panel de administración</h1>
+      <h1>Admin Dashboard</h1>
       <nav>
-        <Link to="/stock">Gestión de stock</Link>
+        <Link to="/inventario">Gestion de inventario</Link>
       </nav>
-      <p>Productos: {products.length}</p>
-      <ul>{products.map((p) => <li key={p._id}>{p.name} - Stock: {p.stock}</li>)}</ul>
+      <p>Products: {products.length}</p>
+      <ul>{products.map((p) => <li key={p.id}>{p.name} - Stock: {p.stock}</li>)}</ul>
     </div>
   );
 }

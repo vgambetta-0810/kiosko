@@ -15,6 +15,7 @@ const User = sequelize.define('User', {
 
 const Product = sequelize.define('Product', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  sku: { type: DataTypes.STRING, allowNull: true, unique: true },
   name: { type: DataTypes.STRING, allowNull: false },
   category: { type: DataTypes.STRING, allowNull: false },
   price: { type: DataTypes.FLOAT, allowNull: false },
@@ -52,12 +53,15 @@ const Notification = sequelize.define('Notification', {
 
 const Sale = sequelize.define('Sale', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  sellerId: { type: DataTypes.UUID, allowNull: false },
+  clientId: { type: DataTypes.UUID, allowNull: true },
   items: { type: DataTypes.JSON, allowNull: false },
-  subtotal: { type: DataTypes.FLOAT, allowNull: false },
-  discount: { type: DataTypes.FLOAT, defaultValue: 0 },
   total: { type: DataTypes.FLOAT, allowNull: false },
+  discount: { type: DataTypes.FLOAT, defaultValue: 0 },
+  finalTotal: { type: DataTypes.FLOAT, allowNull: false },
   paymentMethod: { type: DataTypes.STRING, allowNull: false },
-  ticketNumber: { type: DataTypes.STRING, allowNull: false, unique: true }
+  status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'PAID' },
+  deletedAt: { type: DataTypes.DATE, allowNull: true }
 });
 
 const Purchase = sequelize.define('Purchase', {
@@ -99,8 +103,8 @@ User.belongsTo(User, { as: 'parent', foreignKey: 'parentId' });
 StockMovement.belongsTo(Product, { as: 'product', foreignKey: 'productId' });
 StockMovement.belongsTo(User, { as: 'createdBy', foreignKey: 'createdById' });
 Notification.belongsTo(User, { as: 'user', foreignKey: 'userId' });
+Sale.belongsTo(User, { as: 'seller', foreignKey: 'sellerId' });
 Sale.belongsTo(User, { as: 'client', foreignKey: 'clientId' });
-Sale.belongsTo(User, { as: 'createdBy', foreignKey: 'createdById' });
 Purchase.belongsTo(Supplier, { as: 'supplier', foreignKey: 'supplierId' });
 Purchase.belongsTo(User, { as: 'createdBy', foreignKey: 'createdById' });
 Reservation.belongsTo(User, { as: 'client', foreignKey: 'clientId' });

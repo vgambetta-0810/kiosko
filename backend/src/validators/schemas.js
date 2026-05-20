@@ -17,6 +17,7 @@ exports.loginSchema = Joi.object({
 });
 
 exports.productSchema = Joi.object({
+  sku: Joi.string().trim().max(64).optional().allow('', null),
   name: Joi.string().required(),
   category: Joi.string().required(),
   price: Joi.number().min(0).required(),
@@ -41,11 +42,17 @@ exports.purchaseSchema = Joi.object({
 
 exports.saleSchema = Joi.object({
   client: idSchema.optional().allow(null),
+  clientId: idSchema.optional().allow(null),
   items: Joi.array().items(
-    Joi.object({ product: idSchema.required(), quantity: Joi.number().min(1).required() })
+    Joi.object({
+      product: idSchema.optional(),
+      productId: idSchema.optional(),
+      quantity: Joi.number().invalid(0).required()
+    }).or('product', 'productId')
   ).min(1).required(),
   discount: Joi.number().min(0).default(0),
-  paymentMethod: Joi.string().valid('CASH', 'TRANSFER', 'CARD', 'MP').required()
+  paymentMethod: Joi.string().valid('CASH', 'TRANSFER', 'CARD', 'MP').required(),
+  status: Joi.string().valid('PAID', 'PENDING').default('PAID')
 });
 
 exports.reservationSchema = Joi.object({
