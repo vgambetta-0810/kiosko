@@ -23,18 +23,18 @@ export default function LoginPage() {
       const user = await login(email, password);
       navigate(routeByRole(user.role), { replace: true });
     } catch (err) {
-      setError(err?.response?.data?.message || 'Login failed');
+      setError(err?.response?.data?.message || 'Error al iniciar sesión');
     }
   };
 
   return (
     <div className="page">
-      <h1>School Kiosk Login</h1>
+      <h1>Inicio de sesión del kiosco escolar</h1>
       <form onSubmit={onSubmit} className="card">
         {error ? <p>{error}</p> : null}
         <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" />
-        <button type="submit">Login</button>
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Contraseña" />
+        <button type="submit">Ingresar</button>
         <GoogleLogin
           onSuccess={async (credentialResponse) => {
             setError('');
@@ -42,13 +42,13 @@ export default function LoginPage() {
               const user = await loginWithGoogle(credentialResponse.credential);
               navigate(routeByRole(user.role), { replace: true });
             } catch (err) {
-              setError(err?.response?.data?.message || 'Google login failed');
+              setError(err?.response?.data?.message || 'Error al iniciar sesión con Google');
             }
           }}
-          onError={() => setError('Google login failed')}
+          onError={() => setError('Error al iniciar sesión con Google')}
         />
         <p>
-          No account? <Link to="/register">Create one</Link>
+          ¿No tienes cuenta? <Link to="/register">Crear una</Link>
         </p>
       </form>
     </div>

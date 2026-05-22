@@ -1,14 +1,12 @@
 const Joi = require('joi');
 
-const idSchema = Joi.string().guid({ version: ['uuidv4', 'uuidv5'] });
-
 exports.registerSchema = Joi.object({
   name: Joi.string().required(),
   email: Joi.string().email().required(),
   password: Joi.string().min(6).required(),
   role: Joi.string().valid('ADMIN', 'SELLER', 'CLIENT', 'PARENT').default('CLIENT'),
   age: Joi.number().integer().min(0).max(120).optional(),
-  parent: idSchema.optional().allow(null)
+  parent: Joi.string().hex().length(24).optional().allow(null)
 });
 
 exports.loginSchema = Joi.object({
@@ -33,25 +31,26 @@ exports.supplierSchema = Joi.object({
 });
 
 exports.purchaseSchema = Joi.object({
-  supplier: idSchema.required(),
+  supplier: Joi.string().hex().length(24).required(),
   items: Joi.array().items(
-    Joi.object({ product: idSchema.required(), quantity: Joi.number().min(1).required(), cost: Joi.number().min(0).required() })
+    Joi.object({ product: Joi.string().hex().length(24).required(), quantity: Joi.number().min(1).required(), cost: Joi.number().min(0).required() })
   ).min(1).required()
 });
 
 exports.saleSchema = Joi.object({
-  client: idSchema.optional().allow(null),
+  clientId: Joi.string().hex().length(24).optional().allow(null),
   items: Joi.array().items(
-    Joi.object({ product: idSchema.required(), quantity: Joi.number().min(1).required() })
+    Joi.object({ productId: Joi.string().hex().length(24).required(), quantity: Joi.number().min(1).required() })
   ).min(1).required(),
   discount: Joi.number().min(0).default(0),
-  paymentMethod: Joi.string().valid('CASH', 'TRANSFER', 'CARD', 'MP').required()
+  paymentMethod: Joi.string().valid('CASH', 'TRANSFER', 'CARD', 'MP').required(),
+  status: Joi.string().valid('PAID', 'PENDING').default('PAID')
 });
 
 exports.reservationSchema = Joi.object({
-  client: idSchema.required(),
+  client: Joi.string().hex().length(24).required(),
   items: Joi.array().items(
-    Joi.object({ product: idSchema.required(), quantity: Joi.number().min(1).required(), price: Joi.number().min(0).required() })
+    Joi.object({ product: Joi.string().hex().length(24).required(), quantity: Joi.number().min(1).required(), price: Joi.number().min(0).required() })
   ).min(1).required(),
   paidAmount: Joi.number().min(0).default(0),
   expiresAt: Joi.date().required()
@@ -59,7 +58,7 @@ exports.reservationSchema = Joi.object({
 
 exports.accountMovementSchema = Joi.object({
   ownerType: Joi.string().valid('CLIENT', 'SUPPLIER').required(),
-  ownerId: idSchema.required(),
+  ownerId: Joi.string().hex().length(24).required(),
   type: Joi.string().valid('DEBT', 'PAYMENT', 'RECHARGE').required(),
   amount: Joi.number().min(0.01).required(),
   notes: Joi.string().optional().allow('')

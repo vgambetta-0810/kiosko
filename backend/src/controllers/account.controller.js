@@ -16,11 +16,11 @@ exports.movementsByOwner = asyncHandler(async (req, res) => {
   const { ownerType, ownerId } = req.params;
   const isAdminOrSeller = ['ADMIN', 'SELLER'].includes(req.user.role);
   if (!isAdminOrSeller) {
-    if (ownerType !== 'CLIENT') throw new ApiError(403, 'Forbidden');
-    if (req.user.role === 'CLIENT' && req.user.id !== ownerId) throw new ApiError(403, 'Forbidden');
+    if (ownerType !== 'CLIENT') throw new ApiError(403, 'Prohibido');
+    if (req.user.role === 'CLIENT' && req.user.id !== ownerId) throw new ApiError(403, 'Prohibido');
     if (req.user.role === 'PARENT') {
       const child = await User.findOne({ where: { id: ownerId, parentId: req.user.id, role: 'CLIENT' } });
-      if (!child) throw new ApiError(403, 'Forbidden');
+      if (!child) throw new ApiError(403, 'Prohibido');
     }
   }
   const account = await getOrCreateAccount(ownerType, ownerId);

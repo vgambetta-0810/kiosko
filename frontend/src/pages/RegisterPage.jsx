@@ -27,18 +27,18 @@ export default function RegisterPage() {
       else if (created.role === 'SELLER') navigate('/pos', { replace: true });
       else navigate('/client', { replace: true });
     } catch (err) {
-      setError(err?.response?.data?.message || 'Registration failed');
+      setError(err?.response?.data?.message || 'Error al registrar la cuenta');
     }
   };
 
   return (
     <div className="page">
-      <h1>Create account</h1>
+      <h1>Crear cuenta</h1>
       <form onSubmit={onSubmit} className="card">
         {error ? <p>{error}</p> : null}
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nombre" />
         <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" />
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Contraseña" />
         {canChooseRole ? (
           <select value={role} onChange={(e) => setRole(e.target.value)}>
             <option value="CLIENT">CLIENT</option>
@@ -47,9 +47,9 @@ export default function RegisterPage() {
             <option value="ADMIN">ADMIN</option>
           </select>
         ) : null}
-        <button type="submit">Register</button>
+        <button type="submit">Registrarme</button>
         <p>
-          Already have an account? <Link to="/login">Login</Link>
+          ¿Ya tienes cuenta? <Link to="/login">Iniciar sesión</Link>
         </p>
       </form>
     </div>

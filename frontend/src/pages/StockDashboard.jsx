@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AsyncTypeahead } from 'react-bootstrap-typeahead';
 import { api } from '../services/api';
 import MovementHistory from '../components/MovementHistory';
 
@@ -12,11 +13,16 @@ export default function StockDashboard() {
   const [movements, setMovements] = useState([]);
   const [filters, setFilters] = useState({});
   const [productFilters, setProductFilters] = useState({ name: '', category: '', stock: 'all' });
-  const [newProduct, setNewProduct] = useState({ name: '', category: '', price: '', cost: '', stock: '' });
+  const [newProduct, setNewProduct] = useState({ name: '', codigoBarras: '', price: '', cost: '', stock: '' });
+  const [categories, setCategories] = useState([]);
+  const [categoryLoading, setCategoryLoading] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState([]);
+  const [categoryInput, setCategoryInput] = useState('');
   const [creatingProduct, setCreatingProduct] = useState(false);
   const [createError, setCreateError] = useState('');
   const LOW_STOCK_LIMIT = 10;
   const CRITICAL_STOCK_LIMIT = 5;
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
   useEffect(() => {
     const loadInitialData = async () => {
@@ -67,23 +73,65 @@ export default function StockDashboard() {
     setNewProduct((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   }, []);
 
+  const searchCategories = useCallback(async (query = '') => {
+    setCategoryLoading(true);
+    try {
+      const res = await api.get('/categories', { params: { q: query } });
+      setCategories(res.data || []);
+    } finally {
+      setCategoryLoading(false);
+    }
+  }, []);
+
   const createProduct = async (e) => {
     e.preventDefault();
     setCreatingProduct(true);
     setCreateError('');
 
     try {
+      const currentSelection = selectedCategory[0];
+      const selectedCategoryName = currentSelection?.customOption
+        ? String(currentSelection.label || '').trim()
+        : String(currentSelection?.name || '').trim();
+      const typedCategoryName = String(categoryInput || '').trim();
+      const finalCategoryName = selectedCategoryName || typedCategoryName;
+
+      if (!finalCategoryName) {
+        setCreateError('La categoria es obligatoria');
+        setCreatingProduct(false);
+        return;
+      }
+
+      let categoryId = currentSelection?.id;
+      if (!UUID_REGEX.test(String(categoryId || ''))) categoryId = null;
+      if (!categoryId) {
+        const existing = categories.find((c) => String(c.name || '').toLowerCase() === finalCategoryName.toLowerCase());
+        if (existing?.id) {
+          categoryId = existing.id;
+        } else {
+          const createdCategoryRes = await api.post('/categories', { name: finalCategoryName });
+          categoryId = createdCategoryRes.data.id;
+        }
+      }
+
       await api.post('/products', {
         name: newProduct.name.trim(),
-        category: newProduct.category.trim(),
+        codigoBarras: newProduct.codigoBarras.trim(),
+        categoryId,
         price: Number(newProduct.price),
         cost: Number(newProduct.cost),
         stock: newProduct.stock === '' ? 0 : Number(newProduct.stock)
       });
 
-      setNewProduct({ name: '', category: '', price: '', cost: '', stock: '' });
-      const res = await api.get('/products');
-      setProducts(res.data);
+      setNewProduct({ name: '', codigoBarras: '', price: '', cost: '', stock: '' });
+      setSelectedCategory([]);
+      setCategoryInput('');
+      const [productsRes, categoriesRes] = await Promise.all([
+        api.get('/products'),
+        api.get('/categories')
+      ]);
+      setProducts(productsRes.data);
+      setCategories(categoriesRes.data || []);
     } catch (err) {
       setCreateError(err?.response?.data?.message || 'No se pudo crear el producto');
     } finally {
@@ -215,9 +263,28 @@ export default function StockDashboard() {
           </select>
         </div>
 
-        <form onSubmit={createProduct} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 16 }}>
+        <form onSubmit={createProduct} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 16, alignItems: 'start' }}>
           <input name="name" value={newProduct.name} onChange={handleNewProductChange} placeholder="Nombre" required />
-          <input name="category" value={newProduct.category} onChange={handleNewProductChange} placeholder="Categoria" required />
+          <input name="codigoBarras" value={newProduct.codigoBarras} onChange={handleNewProductChange} placeholder="Codigo de barras" />
+          <AsyncTypeahead
+            id="new-product-category"
+            isLoading={categoryLoading}
+            minLength={0}
+            allowNew
+            onFocus={() => searchCategories('')}
+            onSearch={searchCategories}
+            options={categories}
+            labelKey="name"
+            selected={selectedCategory}
+            onChange={setSelectedCategory}
+            onInputChange={setCategoryInput}
+            className="category-typeahead"
+            newSelectionPrefix="Crear categoria: "
+            placeholder="Categoria"
+            promptText="Escribi para buscar categoria"
+            searchText="Buscando categorias..."
+            emptyLabel="Sin coincidencias. Presiona Enter para crear."
+          />
           <input
             name="price"
             type="number"
@@ -247,6 +314,7 @@ export default function StockDashboard() {
           <thead>
             <tr>
               <th>Nombre</th>
+              <th>Codigo de barras</th>
               <th>Categoria</th>
               <th>Precio de venta</th>
               <th>Precio de compra</th>
@@ -260,6 +328,7 @@ export default function StockDashboard() {
             {filteredProducts.map((p) => (
               <tr key={p.id || p._id} style={{ borderBottom: '1px solid #ddd' }}>
                 <td>{p.name}</td>
+                <td>{p.codigoBarras || '-'}</td>
                 <td>{p.category}</td>
                 <td>${Number(p.price || 0).toFixed(2)}</td>
                 <td>${Number(p.cost || 0).toFixed(2)}</td>
@@ -273,7 +342,7 @@ export default function StockDashboard() {
             ))}
             {filteredProducts.length === 0 ? (
               <tr>
-                <td colSpan={8}>No hay productos que coincidan con los filtros.</td>
+                <td colSpan={9}>No hay productos que coincidan con los filtros.</td>
               </tr>
             ) : null}
           </tbody>
@@ -323,3 +392,5 @@ export default function StockDashboard() {
     </div>
   );
 }
+
+

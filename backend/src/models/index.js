@@ -15,13 +15,21 @@ const User = sequelize.define('User', {
 
 const Product = sequelize.define('Product', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  sku: { type: DataTypes.STRING, allowNull: true, unique: true },
   name: { type: DataTypes.STRING, allowNull: false },
+  codigoBarras: { type: DataTypes.STRING, allowNull: true },
   category: { type: DataTypes.STRING, allowNull: false },
+  categoryId: { type: DataTypes.UUID, allowNull: true },
   price: { type: DataTypes.FLOAT, allowNull: false },
   cost: { type: DataTypes.FLOAT, allowNull: false },
   stock: { type: DataTypes.FLOAT, defaultValue: 0 },
   delayDays: { type: DataTypes.INTEGER, defaultValue: 0 },
   isActive: { type: DataTypes.BOOLEAN, defaultValue: true }
+});
+
+const Category = sequelize.define('Category', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  name: { type: DataTypes.STRING, allowNull: false, unique: true }
 });
 
 const Supplier = sequelize.define('Supplier', {
@@ -52,12 +60,15 @@ const Notification = sequelize.define('Notification', {
 
 const Sale = sequelize.define('Sale', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  sellerId: { type: DataTypes.UUID, allowNull: false },
+  clientId: { type: DataTypes.UUID, allowNull: true },
   items: { type: DataTypes.JSON, allowNull: false },
-  subtotal: { type: DataTypes.FLOAT, allowNull: false },
-  discount: { type: DataTypes.FLOAT, defaultValue: 0 },
   total: { type: DataTypes.FLOAT, allowNull: false },
+  discount: { type: DataTypes.FLOAT, defaultValue: 0 },
+  finalTotal: { type: DataTypes.FLOAT, allowNull: false },
   paymentMethod: { type: DataTypes.STRING, allowNull: false },
-  ticketNumber: { type: DataTypes.STRING, allowNull: false, unique: true }
+  status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'PAID' },
+  deletedAt: { type: DataTypes.DATE, allowNull: true }
 });
 
 const Purchase = sequelize.define('Purchase', {
@@ -96,11 +107,12 @@ const AccountMovement = sequelize.define('AccountMovement', {
 });
 
 User.belongsTo(User, { as: 'parent', foreignKey: 'parentId' });
+Product.belongsTo(Category, { as: 'categoryEntity', foreignKey: 'categoryId' });
 StockMovement.belongsTo(Product, { as: 'product', foreignKey: 'productId' });
 StockMovement.belongsTo(User, { as: 'createdBy', foreignKey: 'createdById' });
 Notification.belongsTo(User, { as: 'user', foreignKey: 'userId' });
+Sale.belongsTo(User, { as: 'seller', foreignKey: 'sellerId' });
 Sale.belongsTo(User, { as: 'client', foreignKey: 'clientId' });
-Sale.belongsTo(User, { as: 'createdBy', foreignKey: 'createdById' });
 Purchase.belongsTo(Supplier, { as: 'supplier', foreignKey: 'supplierId' });
 Purchase.belongsTo(User, { as: 'createdBy', foreignKey: 'createdById' });
 Reservation.belongsTo(User, { as: 'client', foreignKey: 'clientId' });
@@ -111,6 +123,7 @@ module.exports = {
   Op,
   User,
   Product,
+  Category,
   Supplier,
   StockMovement,
   Notification,
