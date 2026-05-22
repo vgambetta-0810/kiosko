@@ -8,8 +8,8 @@ const { roles } = require('../constants/enums');
 exports.adjustStock = async ({ productId, type, quantity, reason, referenceType, referenceId, userId, session: transaction }) => {
   const delta = type === 'IN' || type === 'RETURN' ? quantity : -quantity;
   const product = await Product.findByPk(productId, { transaction });
-  if (!product) throw new Error('Product not found');
-  if (product.stock + delta < 0) throw new Error(`Insufficient stock for ${product.name}`);
+  if (!product) throw new Error('Producto no encontrado');
+  if (product.stock + delta < 0) throw new Error(`Stock insuficiente para ${product.name}`);
 
   product.stock += delta;
   await product.save({ transaction });
@@ -23,8 +23,8 @@ exports.adjustStock = async ({ productId, type, quantity, reason, referenceType,
       await Notification.bulkCreate(
         admins.map((admin) => ({
           userId: admin.id,
-          title: 'Low stock alert',
-          message: `${product.name} has low stock (${product.stock})`,
+          title: 'Alerta de stock bajo',
+          message: `${product.name} tiene stock bajo (${product.stock})`,
           type: 'LOW_STOCK'
         })),
         { transaction }
