@@ -179,7 +179,7 @@ export default function StockDashboard() {
               </tr>
             </thead>
             <tbody>
-              {lowStockfilteredProducts.map((p) => (
+              {lowStockProducts.map((p) => (
                 <tr key={`low-${p.id || p._id}`} style={{ borderBottom: '1px solid #ddd' }}>
                   <td>{p.name}</td>
                   <td style={{ color: Number(p.stock) <= CRITICAL_STOCK_LIMIT ? 'darkred' : 'red', fontWeight: 700 }}>{p.stock}</td>
@@ -257,13 +257,8 @@ export default function StockDashboard() {
             </tr>
           </thead>
           <tbody>
-
             {filteredProducts.map((p) => (
               <tr key={p.id || p._id} style={{ borderBottom: '1px solid #ddd' }}>
-
-            {filteredProducts.map((p) => (
-              <tr key={p.id || p._id} style={{ borderBottom: '1px solid #ddd' }}>
-
                 <td>{p.name}</td>
                 <td>{p.category}</td>
                 <td>${Number(p.price || 0).toFixed(2)}</td>
@@ -272,11 +267,7 @@ export default function StockDashboard() {
                 <td>{reservedByProductId[p.id || p._id] || 0}</td>
                 <td>{Math.max(0, Number(p.stock || 0) - Number(reservedByProductId[p.id || p._id] || 0))}</td>
                 <td>
-
                   <button onClick={() => loadMovements(p.id || p._id)}>Ver historial</button>
-
-                  <button onClick={() => loadMovements(p.id || p._id)}>Ver historial</button>
-
                 </td>
               </tr>
             ))}

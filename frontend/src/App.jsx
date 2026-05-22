@@ -6,6 +6,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import StockDashboard from './pages/StockDashboard';
 import SellerPOS from './pages/SellerPOS';
 import ClientPanel from './pages/ClientPanel';
+import AnalyticsDashboard from './pages/AnalyticsDashboard';
 
 const Guard = ({ roles, children }) => {
   const { user, loading } = useAuth();
@@ -33,7 +34,7 @@ const Navigation = () => {
 
   const links = [{ to: '/', label: 'Inicio' }];
   if (user.role === 'ADMIN') {
-    links.push({ to: '/admin', label: 'Admin' }, { to: '/inventario', label: 'Inventario' }, { to: '/pos', label: 'POS' });
+    links.push({ to: '/admin', label: 'Admin' }, { to: '/analytics', label: 'Analitica' }, { to: '/inventario', label: 'Inventario' }, { to: '/pos', label: 'POS' });
   }
   if (user.role === 'SELLER') links.push({ to: '/pos', label: 'POS' });
   if (user.role === 'CLIENT' || user.role === 'PARENT') links.push({ to: '/client', label: 'Panel' });
@@ -66,6 +67,7 @@ export default function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/admin" element={<Guard roles={["ADMIN"]}><AdminDashboard /></Guard>} />
+        <Route path="/analytics" element={<Guard roles={["ADMIN"]}><AnalyticsDashboard /></Guard>} />
         <Route path="/inventario" element={<Guard roles={["ADMIN"]}><StockDashboard /></Guard>} />
         <Route path="/stock" element={<Navigate to="/inventario" replace />} />
         <Route path="/pos" element={<Guard roles={["ADMIN", "SELLER"]}><SellerPOS /></Guard>} />
