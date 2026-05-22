@@ -17,12 +17,19 @@ const Product = sequelize.define('Product', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   sku: { type: DataTypes.STRING, allowNull: true, unique: true },
   name: { type: DataTypes.STRING, allowNull: false },
+  codigoBarras: { type: DataTypes.STRING, allowNull: true },
   category: { type: DataTypes.STRING, allowNull: false },
+  categoryId: { type: DataTypes.UUID, allowNull: true },
   price: { type: DataTypes.FLOAT, allowNull: false },
   cost: { type: DataTypes.FLOAT, allowNull: false },
   stock: { type: DataTypes.FLOAT, defaultValue: 0 },
   delayDays: { type: DataTypes.INTEGER, defaultValue: 0 },
   isActive: { type: DataTypes.BOOLEAN, defaultValue: true }
+});
+
+const Category = sequelize.define('Category', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  name: { type: DataTypes.STRING, allowNull: false, unique: true }
 });
 
 const Supplier = sequelize.define('Supplier', {
@@ -100,6 +107,7 @@ const AccountMovement = sequelize.define('AccountMovement', {
 });
 
 User.belongsTo(User, { as: 'parent', foreignKey: 'parentId' });
+Product.belongsTo(Category, { as: 'categoryEntity', foreignKey: 'categoryId' });
 StockMovement.belongsTo(Product, { as: 'product', foreignKey: 'productId' });
 StockMovement.belongsTo(User, { as: 'createdBy', foreignKey: 'createdById' });
 Notification.belongsTo(User, { as: 'user', foreignKey: 'userId' });
@@ -115,6 +123,7 @@ module.exports = {
   Op,
   User,
   Product,
+  Category,
   Supplier,
   StockMovement,
   Notification,
