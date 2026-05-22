@@ -12,5 +12,6 @@ router.use('/stock', require('./stock.routes'));
 router.use('/accounts', require('./account.routes'));
 router.use('/reservations', require('./reservation.routes'));
 router.use('/notifications', require('./notification.routes'));
+router.use('/analytics', require('./analytics.routes'));
 
 module.exports = router;
