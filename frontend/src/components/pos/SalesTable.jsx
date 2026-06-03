@@ -24,10 +24,14 @@ function SalesTable({ items, highlightedProductId, onUpdateQty, onRemove }) {
             const isHighlighted = item.productId === highlightedProductId;
             return (
               <tr key={item.productId} className={isHighlighted ? 'pos-row-highlight' : ''}>
-                <td>{item.name}</td>
+                <td>
+                  <strong>{item.name}</strong>
+                  <span>{item.sku || item.codigoBarras || item.productId}</span>
+                </td>
                 <td>
                   <input
                     type="number"
+                    step="any"
                     value={item.quantity}
                     onChange={(e) => onUpdateQty(item.productId, e.target.value)}
                     aria-label={`Cantidad de ${item.name}`}
@@ -36,6 +40,7 @@ function SalesTable({ items, highlightedProductId, onUpdateQty, onRemove }) {
                 <td>${Number(item.price).toFixed(2)}</td>
                 <td>${(item.quantity * item.price).toFixed(2)}</td>
                 <td>
+                  <span className="pos-stock-pill">Stock {item.stock}</span>
                   <button type="button" className="pos-remove-btn" onClick={() => onRemove(item.productId)}>
                     X
                   </button>

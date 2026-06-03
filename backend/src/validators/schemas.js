@@ -16,12 +16,16 @@ exports.loginSchema = Joi.object({
 
 exports.productSchema = Joi.object({
   name: Joi.string().required(),
-  category: Joi.string().required(),
+  sku: Joi.string().optional().allow('', null),
+  codigoBarras: Joi.string().optional().allow('', null),
+  category: Joi.string().optional().allow(''),
+  categoryId: Joi.string().guid({ version: ['uuidv4'] }).optional().allow('', null),
+  newCategoryName: Joi.string().optional().allow(''),
   price: Joi.number().min(0).required(),
   cost: Joi.number().min(0).required(),
   stock: Joi.number().min(0).default(0),
   delayDays: Joi.number().min(0).default(0)
-});
+}).or('category', 'categoryId', 'newCategoryName');
 
 exports.supplierSchema = Joi.object({
   name: Joi.string().required(),
