@@ -13,6 +13,21 @@ const ensureSchema = async () => {
   const queryInterface = sequelize.getQueryInterface();
   const productsTable = await queryInterface.describeTable('Products');
 
+  if (!productsTable.sku) {
+    await queryInterface.addColumn('Products', 'sku', {
+      type: Sequelize.STRING,
+      allowNull: true
+    });
+    await queryInterface.addIndex('Products', ['sku'], {
+      unique: true,
+      where: {
+        sku: {
+          [Sequelize.Op.ne]: null
+        }
+      }
+    });
+  }
+
   if (!productsTable.categoryId) {
     await queryInterface.addColumn('Products', 'categoryId', {
       type: Sequelize.UUID,
