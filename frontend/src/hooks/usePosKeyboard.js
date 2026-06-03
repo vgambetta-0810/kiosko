@@ -38,6 +38,12 @@ export default function usePosKeyboard({
         return;
       }
 
+      if (event.key === 'Escape' && !isModalOpen) {
+        event.preventDefault();
+        onFocusSku();
+        return;
+      }
+
       if (isTypingField && event.key !== 'F2' && event.key !== 'F4') {
         return;
       }

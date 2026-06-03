@@ -18,7 +18,13 @@ function CheckoutStep({
   onDiscountChange
 }) {
   return (
-    <div className="pos-checkout">
+    <form
+      className="pos-checkout"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit();
+      }}
+    >
       <h3>Resumen de venta</h3>
       <div className="pos-checkout__summary">
         <div>Items: {cart.length}</div>
@@ -63,9 +69,9 @@ function CheckoutStep({
 
       <div className="pos-checkout__actions">
         <button type="button" className="pos-modal__cancel" onClick={onBack} disabled={loading}>Volver</button>
-        <button type="button" onClick={onSubmit} disabled={loading}>{loading ? 'Saving...' : 'Finalizar'}</button>
+        <button type="submit" disabled={loading}>{loading ? 'Saving...' : 'Finalizar'}</button>
       </div>
-    </div>
+    </form>
   );
 }
 

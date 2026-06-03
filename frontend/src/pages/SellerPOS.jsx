@@ -1,263 +1,338 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../services/api';
-import SKUInput from '../components/pos/SKUInput';
+import CheckoutStep from '../components/pos/CheckoutStep';
 import QuantityModal from '../components/pos/QuantityModal';
 import SalesTable from '../components/pos/SalesTable';
-import CheckoutStep from '../components/pos/CheckoutStep';
+import SKUInput from '../components/pos/SKUInput';
 import usePosKeyboard from '../hooks/usePosKeyboard';
+import { api } from '../services/api';
 
-const HIGHLIGHT_MS = 900;
-const STEP_CAPTURE = 'CAPTURE';
-const STEP_CHECKOUT = 'CHECKOUT';
+const PRODUCT_LIMIT = 15;
 
-const normalizeText = (value) => String(value || '').trim();
+const getEntityId = (entity) => entity?.id || entity?._id;
+
+const normalizeScanValue = (value) => String(value || '').trim().toUpperCase();
+
+const productMatchesQuery = (product, query) => {
+  const normalizedQuery = normalizeScanValue(query);
+  if (!normalizedQuery) return true;
+
+  return [product.name, product.sku, product.codigoBarras, getEntityId(product)]
+    .filter(Boolean)
+    .some((value) => normalizeScanValue(value).includes(normalizedQuery));
+};
+
+const productMatchesExactCode = (product, query) => {
+  const normalizedQuery = normalizeScanValue(query);
+  if (!normalizedQuery) return false;
+
+  return [product.sku, product.codigoBarras, getEntityId(product)]
+    .filter(Boolean)
+    .some((value) => normalizeScanValue(value) === normalizedQuery);
+};
 
 export default function SellerPOS() {
+  const [products, setProducts] = useState([]);
   const [clients, setClients] = useState([]);
-  const [skuInput, setSkuInput] = useState('');
+  const [skuQuery, setSkuQuery] = useState('');
   const [cart, setCart] = useState([]);
   const [discount, setDiscount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [status, setStatus] = useState('PAID');
   const [clientId, setClientId] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
+  const [step, setStep] = useState('items');
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [isQtyModalOpen, setIsQtyModalOpen] = useState(false);
   const [highlightedProductId, setHighlightedProductId] = useState('');
-  const [step, setStep] = useState(STEP_CAPTURE);
+  const [loading, setLoading] = useState(false);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [message, setMessage] = useState('');
 
   const skuInputRef = useRef(null);
   const quantityInputRef = useRef(null);
-  const lookupInFlightRef = useRef(false);
+  const highlightTimerRef = useRef(null);
+
+  const isQuantityModalOpen = Boolean(selectedProduct);
 
   const focusSku = useCallback(() => {
-    const input = skuInputRef.current;
-    if (!input) return;
-    input.focus();
-    input.select?.();
+    window.requestAnimationFrame(() => {
+      skuInputRef.current?.focus();
+      skuInputRef.current?.select();
+    });
   }, []);
 
-  const handleModalCancel = useCallback(() => {
-    setIsQtyModalOpen(false);
-    setSelectedProduct(null);
-    setError('');
-    setTimeout(() => focusSku(), 0);
+  useEffect(() => {
+    const load = async () => {
+      setMessage('');
+      try {
+        const [productsRes, clientsRes] = await Promise.all([api.get('/products'), api.get('/sales/clients')]);
+        setProducts(productsRes.data.filter((product) => product.isActive));
+        setClients(clientsRes.data);
+      } catch (error) {
+        setMessage(error?.response?.data?.message || 'No se pudo cargar la información del POS');
+      }
+    };
+
+    load();
+  }, []);
+
+  useEffect(() => {
+    focusSku();
   }, [focusSku]);
 
-  const goToCheckout = useCallback(() => {
-    if (!cart.length) {
-      setError('Agrega al menos un producto antes de continuar');
-      return;
-    }
-    setStep(STEP_CHECKOUT);
-    setError('');
-  }, [cart.length]);
+  useEffect(() => {
+    if (!isQuantityModalOpen && step === 'items') focusSku();
+  }, [focusSku, isQuantityModalOpen, step]);
 
-  const backToCapture = useCallback(() => {
-    setStep(STEP_CAPTURE);
-    setError('');
-    setTimeout(() => focusSku(), 0);
-  }, [focusSku]);
+  useEffect(() => {
+    return () => {
+      if (highlightTimerRef.current) window.clearTimeout(highlightTimerRef.current);
+    };
+  }, []);
 
-  const subtotal = useMemo(() => cart.reduce((acc, i) => acc + i.quantity * i.price, 0), [cart]);
+  const filteredProducts = useMemo(() => {
+    return products.filter((product) => productMatchesQuery(product, skuQuery)).slice(0, PRODUCT_LIMIT);
+  }, [products, skuQuery]);
+
+  const subtotal = useMemo(() => cart.reduce((acc, item) => acc + item.quantity * item.price, 0), [cart]);
   const safeDiscount = Number(discount) > subtotal ? subtotal : Number(discount) || 0;
   const finalTotal = Math.max(0, subtotal - safeDiscount);
 
-  const canGoCheckout = step === STEP_CAPTURE && !isQtyModalOpen && cart.length > 0 && !loading;
-  const canFinalize = step === STEP_CHECKOUT && !isQtyModalOpen && !loading;
+  const flashUpdatedRow = useCallback((productId) => {
+    setHighlightedProductId(productId);
+    if (highlightTimerRef.current) window.clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = window.setTimeout(() => setHighlightedProductId(''), 900);
+  }, []);
+
+  const openQuantityModal = useCallback((product) => {
+    setMessage('');
+    setSelectedProduct(product);
+  }, []);
+
+  const closeQuantityModal = useCallback(() => {
+    setSelectedProduct(null);
+    setSkuQuery('');
+  }, []);
+
+  const resolveProductByQuery = useCallback(
+    async (query) => {
+      const exactLocal = products.find((product) => productMatchesExactCode(product, query));
+      if (exactLocal) return exactLocal;
+
+      const response = await api.get('/products/lookup', { params: { q: query } });
+      const items = response.data?.items || [];
+      if (items.length === 1) return items[0];
+
+      const exactRemote = items.find((product) => productMatchesExactCode(product, query));
+      if (exactRemote) return exactRemote;
+
+      return null;
+    },
+    [products]
+  );
+
+  const handleSkuSubmit = useCallback(
+    async (event) => {
+      if (event.key !== 'Enter') return;
+
+      event.preventDefault();
+      const query = skuQuery.trim();
+      if (!query) {
+        setMessage('Ingresá o escaneá un SKU');
+        focusSku();
+        return;
+      }
+
+      setLookupLoading(true);
+      setMessage('');
+
+      try {
+        const product = await resolveProductByQuery(query);
+        if (!product) {
+          setMessage('Producto no encontrado o búsqueda ambigua');
+          focusSku();
+          return;
+        }
+        openQuantityModal(product);
+      } catch (error) {
+        setMessage(error?.response?.data?.message || 'No se pudo buscar el producto');
+        focusSku();
+      } finally {
+        setLookupLoading(false);
+      }
+    },
+    [focusSku, openQuantityModal, resolveProductByQuery, skuQuery]
+  );
+
+  const addQuantityToCart = useCallback(
+    (quantityValue) => {
+      const quantity = Number(quantityValue);
+      const productId = getEntityId(selectedProduct);
+
+      if (!selectedProduct || !productId || Number.isNaN(quantity)) {
+        setMessage('Cantidad inválida');
+        return;
+      }
+
+      setCart((prev) => {
+        const found = prev.find((item) => item.productId === productId);
+
+        if (!found && quantity === 0) return prev;
+
+        if (found) {
+          const nextQuantity = found.quantity + quantity;
+          if (nextQuantity === 0) return prev.filter((item) => item.productId !== productId);
+
+          return prev.map((item) => (item.productId === productId ? { ...item, quantity: nextQuantity } : item));
+        }
+
+        return [
+          ...prev,
+          {
+            productId,
+            name: selectedProduct.name,
+            sku: selectedProduct.sku,
+            codigoBarras: selectedProduct.codigoBarras,
+            price: Number(selectedProduct.price) || 0,
+            stock: Number(selectedProduct.stock) || 0,
+            quantity
+          }
+        ];
+      });
+
+      flashUpdatedRow(productId);
+      closeQuantityModal();
+    },
+    [closeQuantityModal, flashUpdatedRow, selectedProduct]
+  );
+
+  const updateQty = useCallback((productId, quantityValue) => {
+    const quantity = Number(quantityValue);
+    if (quantityValue === '' || Number.isNaN(quantity)) {
+      setMessage('Ingresá una cantidad válida');
+      return;
+    }
+
+    setMessage('');
+    setCart((prev) => {
+      if (quantity === 0) return prev.filter((item) => item.productId !== productId);
+      return prev.map((item) => (item.productId === productId ? { ...item, quantity } : item));
+    });
+  }, []);
+
+  const removeItem = useCallback((productId) => {
+    setCart((prev) => prev.filter((item) => item.productId !== productId));
+  }, []);
+
+  const goCheckout = useCallback(() => {
+    if (!cart.length) {
+      setMessage('Cargá al menos un producto');
+      focusSku();
+      return;
+    }
+    setMessage('');
+    setStep('checkout');
+  }, [cart.length, focusSku]);
+
+  const goItems = useCallback(() => {
+    setStep('items');
+    setMessage('');
+    focusSku();
+  }, [focusSku]);
 
   const submitSale = useCallback(async () => {
-    if (!cart.length) return setMessage('Add at least one product');
-    if (status === 'PENDING' && !clientId) return setMessage('Client is required for pending sales');
+    if (!cart.length) {
+      setMessage('Cargá al menos un producto');
+      return;
+    }
 
     setLoading(true);
     setMessage('');
-    setError('');
+
     try {
       await api.post('/sales', {
         clientId: clientId || null,
-        items: cart.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+        items: cart.map((item) => ({ productId: item.productId, quantity: item.quantity })),
         discount: safeDiscount,
         paymentMethod,
         status
       });
+
       setCart([]);
       setDiscount(0);
       setClientId('');
       setStatus('PAID');
       setPaymentMethod('CASH');
-      setMessage('Sale registered successfully');
-      setSkuInput('');
-      setStep(STEP_CAPTURE);
-      setTimeout(() => focusSku(), 0);
-    } catch (apiError) {
-      setMessage(apiError?.response?.data?.message || 'Failed to register sale');
+      setStep('items');
+      setMessage('Venta registrada correctamente');
+
+      const productsRes = await api.get('/products');
+      setProducts(productsRes.data.filter((product) => product.isActive));
+      focusSku();
+    } catch (error) {
+      setMessage(error?.response?.data?.message || 'No se pudo registrar la venta');
     } finally {
       setLoading(false);
     }
-  }, [cart, clientId, discount, focusSku, paymentMethod, safeDiscount, status]);
+  }, [cart, clientId, focusSku, paymentMethod, safeDiscount, status]);
 
   usePosKeyboard({
-    isModalOpen: isQtyModalOpen,
-    onEscape: handleModalCancel,
+    isModalOpen: isQuantityModalOpen,
+    onEscape: closeQuantityModal,
     onFocusSku: focusSku,
-    onGoCheckout: goToCheckout,
+    onGoCheckout: goCheckout,
     onFinalize: submitSale,
-    canGoCheckout,
-    canFinalize
+    canGoCheckout: step === 'items' && cart.length > 0,
+    canFinalize: step === 'checkout' && cart.length > 0 && !loading
   });
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const clientsRes = await api.get('/sales/clients');
-        setClients(clientsRes.data);
-      } catch (_error) {
-        setError('No se pudieron cargar clientes');
-      }
-    };
-    load();
-    setTimeout(() => focusSku(), 0);
-  }, [focusSku]);
-
-  useEffect(() => {
-    if (!highlightedProductId) return undefined;
-    const timer = setTimeout(() => setHighlightedProductId(''), HIGHLIGHT_MS);
-    return () => clearTimeout(timer);
-  }, [highlightedProductId]);
-
-  const addOrUpdateCartLine = useCallback((product, quantityDelta) => {
-    const parsedQty = Number(quantityDelta);
-    if (!Number.isFinite(parsedQty) || parsedQty === 0) {
-      setError('La cantidad no puede ser 0');
-      return false;
-    }
-
-    setCart((prev) => {
-      const existing = prev.find((item) => item.productId === product.id);
-      if (!existing) {
-        return [...prev, { productId: product.id, name: product.name, price: product.price, stock: product.stock, quantity: parsedQty }];
-      }
-
-      return prev
-        .map((item) => {
-          if (item.productId !== product.id) return item;
-          return { ...item, quantity: item.quantity + parsedQty };
-        })
-        .filter((item) => item.quantity !== 0);
-    });
-
-    setHighlightedProductId(product.id);
-    setMessage(`Actualizado: ${product.name} (${parsedQty > 0 ? '+' : ''}${parsedQty})`);
-    setError('');
-    return true;
-  }, []);
-
-  const lookupProduct = useCallback(async (query) => {
-    const { data } = await api.get('/products/lookup', { params: { q: query } });
-    const items = Array.isArray(data?.items) ? data.items : [];
-    if (!items.length) return null;
-    return items[0];
-  }, []);
-
-  const handleSkuSubmit = useCallback(
-    async (event) => {
-      if (event.key !== 'Enter') return;
-      event.preventDefault();
-
-      if (isQtyModalOpen || step !== STEP_CAPTURE) return;
-      if (lookupInFlightRef.current) return;
-
-      const rawValue = normalizeText(skuInput);
-      if (!rawValue) {
-        setError('Ingresa un SKU o nombre de producto');
-        return;
-      }
-
-      lookupInFlightRef.current = true;
-      setError('');
-      setMessage('');
-
-      try {
-        const product = await lookupProduct(rawValue);
-        if (!product) {
-          setError('Producto no encontrado');
-          return;
-        }
-
-        setSelectedProduct(product);
-        setIsQtyModalOpen(true);
-      } catch (_error) {
-        setError('No se pudo buscar el producto');
-      } finally {
-        lookupInFlightRef.current = false;
-      }
-    },
-    [isQtyModalOpen, lookupProduct, skuInput, step]
-  );
-
-  const handleModalConfirm = useCallback(
-    (quantityValue) => {
-      if (!selectedProduct) return;
-      const success = addOrUpdateCartLine(selectedProduct, quantityValue);
-      if (!success) return;
-
-      setIsQtyModalOpen(false);
-      setSelectedProduct(null);
-      setSkuInput('');
-      setTimeout(() => focusSku(), 0);
-    },
-    [addOrUpdateCartLine, selectedProduct, focusSku]
-  );
-
-  const updateQty = useCallback((productId, quantity) => {
-    const numeric = Number(quantity);
-    if (!Number.isFinite(numeric)) return;
-
-    setCart((prev) =>
-      prev
-        .map((item) => {
-          if (item.productId !== productId) return item;
-          if (numeric === 0) return null;
-          return { ...item, quantity: numeric };
-        })
-        .filter(Boolean)
-    );
-
-    setHighlightedProductId(productId);
-    setError('');
-  }, []);
-
-  const removeItem = useCallback((productId) => {
-    setCart((prev) => prev.filter((item) => item.productId !== productId));
-    setError('');
-  }, []);
-
   return (
-    <div className="page">
-      <h1>Seller POS</h1>
-      <div className="card pos-card">
-        <div className="pos-steps">
-          <span className={step === STEP_CAPTURE ? 'is-active' : ''}>1. Carga</span>
-          <span className={step === STEP_CHECKOUT ? 'is-active' : ''}>2. Resumen</span>
+    <div className="page pos-page">
+      <header className="pos-header">
+        <div>
+          <p className="pos-kicker">Caja registradora</p>
+          <h1>Seller POS</h1>
         </div>
-        <div className="pos-shortcuts">Atajos: F2 foco SKU, F4 siguiente, Ctrl+Enter finalizar, Esc cancelar modal</div>
+        <div className="pos-total-card">
+          <span>Total</span>
+          <strong>${finalTotal.toFixed(2)}</strong>
+        </div>
+      </header>
 
-        {step === STEP_CAPTURE ? (
+      <div className="card pos-card">
+        {step === 'items' ? (
           <>
-            <SKUInput value={skuInput} onChange={setSkuInput} onSubmit={handleSkuSubmit} inputRef={skuInputRef} disabled={loading} />
-            <SalesTable
-              items={cart}
-              highlightedProductId={highlightedProductId}
-              onUpdateQty={updateQty}
-              onRemove={removeItem}
-            />
-            <div className="pos-capture-footer">
-              <div>Subtotal: ${subtotal.toFixed(2)}</div>
-              <button type="button" onClick={goToCheckout} disabled={!cart.length || loading}>Siguiente</button>
-            </div>
+            <section className="pos-entry-panel">
+              <SKUInput
+                value={skuQuery}
+                onChange={setSkuQuery}
+                onSubmit={handleSkuSubmit}
+                inputRef={skuInputRef}
+                disabled={lookupLoading || loading}
+                loading={lookupLoading}
+              />
+
+              <div className="pos-product-list">
+                {filteredProducts.map((product) => (
+                  <button key={getEntityId(product)} type="button" onClick={() => openQuantityModal(product)}>
+                    <span>{product.name}</span>
+                    <small>
+                      {product.sku || product.codigoBarras || getEntityId(product)} · ${Number(product.price).toFixed(2)} · Stock {product.stock}
+                    </small>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <SalesTable items={cart} highlightedProductId={highlightedProductId} onUpdateQty={updateQty} onRemove={removeItem} />
+
+            <footer className="pos-actions">
+              <div>
+                <span>Subtotal</span>
+                <strong>${subtotal.toFixed(2)}</strong>
+              </div>
+              <button type="button" onClick={goCheckout} disabled={!cart.length}>
+                Continuar
+              </button>
+            </footer>
           </>
         ) : (
           <CheckoutStep
@@ -270,7 +345,7 @@ export default function SellerPOS() {
             subtotal={subtotal}
             finalTotal={finalTotal}
             loading={loading}
-            onBack={backToCapture}
+            onBack={goItems}
             onSubmit={submitSale}
             onClientChange={setClientId}
             onStatusChange={setStatus}
@@ -279,16 +354,15 @@ export default function SellerPOS() {
           />
         )}
 
-        {error ? <small className="pos-feedback pos-feedback--error">{error}</small> : null}
-        {!error && message ? <small className="pos-feedback">{message}</small> : null}
+        {message ? <small className="pos-message">{message}</small> : null}
       </div>
 
       <QuantityModal
-        isOpen={isQtyModalOpen}
+        isOpen={isQuantityModalOpen}
         product={selectedProduct}
-        onConfirm={handleModalConfirm}
-        onCancel={handleModalCancel}
         inputRef={quantityInputRef}
+        onConfirm={addQuantityToCart}
+        onCancel={closeQuantityModal}
       />
     </div>
   );
