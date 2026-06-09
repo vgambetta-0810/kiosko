@@ -2,22 +2,37 @@ const formatMoney = (value) => new Intl.NumberFormat('es-AR', { style: 'currency
 
 export function ProductRanking({ title, rows = [], showAmount = true }) {
   return (
-    <section className="rounded-2xl border border-panelBorder bg-panelSoft p-4">
-      <h3 className="mb-3 text-sm font-semibold text-slate-200">{title}</h3>
-      <div className="space-y-2">
-        {rows.map((row, idx) => (
-          <div key={`${row.productId}-${idx}`} className="flex items-center justify-between rounded-xl bg-slate-900/50 px-3 py-2">
-            <div>
-              <p className="text-sm font-medium text-slate-100">{row.product?.name || 'Producto'}</p>
-              <p className="text-xs text-slate-400">{row.product?.sku || row.productId}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-cyan-300">{Number(row.quantity || 0)} u.</p>
-              {showAmount ? <p className="text-xs text-slate-300">{formatMoney(row.gross || row.amount || 0)}</p> : null}
-            </div>
-          </div>
-        ))}
-        {!rows.length ? <p className="text-sm text-slate-400">Sin datos en el rango seleccionado.</p> : null}
+    <section className="analytics-panel">
+      <h3>{title}</h3>
+      <div className="inventory-table-card analytics-ranking-table">
+        <table className="inventory-table inventory-table--compact">
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th>Unidades</th>
+              {showAmount ? <th>Monto</th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={`${row.productId}-${index}`}>
+                <td>
+                  <strong>{row.product?.name || 'Producto'}</strong>
+                  <span className="inventory-table__muted">{row.product?.sku || row.productId}</span>
+                </td>
+                <td>{Number(row.quantity || 0)} u.</td>
+                {showAmount ? <td>{formatMoney(row.gross || row.amount || 0)}</td> : null}
+              </tr>
+            ))}
+            {!rows.length ? (
+              <tr>
+                <td colSpan={showAmount ? 3 : 2} className="inventory-table__empty">
+                  Sin datos en el rango seleccionado.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
       </div>
     </section>
   );
@@ -25,18 +40,18 @@ export function ProductRanking({ title, rows = [], showAmount = true }) {
 
 export function FinanceStrip({ finance }) {
   const items = [
-    { label: 'Cobrado real', value: finance?.collected, color: 'text-emerald-300' },
-    { label: 'Deuda pendiente', value: finance?.pendingDebt, color: 'text-amber-300' },
-    { label: 'Descuentos', value: finance?.discounts, color: 'text-blue-300' },
-    { label: 'Pérdida por devoluciones', value: finance?.returnsLost, color: 'text-rose-300' }
+    { label: 'Cobrado real', value: finance?.collected, tone: 'success' },
+    { label: 'Deuda pendiente', value: finance?.pendingDebt, tone: 'warning' },
+    { label: 'Descuentos', value: finance?.discounts, tone: 'info' },
+    { label: 'Perdida por devoluciones', value: finance?.returnsLost, tone: 'danger' }
   ];
 
   return (
-    <section className="grid gap-3 rounded-2xl border border-panelBorder bg-panelSoft p-4 md:grid-cols-4">
+    <section className="analytics-finance-strip" aria-label="Resumen financiero">
       {items.map((item) => (
-        <article key={item.label} className="rounded-xl bg-slate-900/60 p-3">
-          <p className="text-xs uppercase tracking-wide text-slate-400">{item.label}</p>
-          <p className={`mt-1 text-lg font-semibold ${item.color}`}>{formatMoney(item.value || 0)}</p>
+        <article key={item.label} className={`analytics-summary-box analytics-summary-box--${item.tone}`}>
+          <span>{item.label}</span>
+          <strong>{formatMoney(item.value || 0)}</strong>
         </article>
       ))}
     </section>

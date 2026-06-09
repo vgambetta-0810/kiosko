@@ -16,8 +16,12 @@ export default function AnalyticsDashboard() {
   const [error, setError] = useState('');
 
   const loadMetadata = async () => {
-    const { data: meta } = await api.get('/analytics/filters');
-    setMetadata(meta);
+    try {
+      const { data: meta } = await api.get('/analytics/filters');
+      setMetadata(meta);
+    } catch (err) {
+      setError(err?.response?.data?.message || 'No se pudieron cargar los filtros de analitica');
+    }
   };
 
   const loadAnalytics = async () => {
@@ -28,7 +32,7 @@ export default function AnalyticsDashboard() {
       const { data: analytics } = await api.get('/analytics/dashboard', { params });
       setData(analytics);
     } catch (err) {
-      setError(err?.response?.data?.message || 'No se pudo cargar analitica');
+      setError(err?.response?.data?.message || 'No se pudo cargar la analitica');
     } finally {
       setLoading(false);
     }
@@ -42,7 +46,7 @@ export default function AnalyticsDashboard() {
   const daily = data?.charts?.dailySales || [];
 
   const cards = useMemo(() => [
-    { title: 'Ventas netas del dia', key: 'netSales', icon: Wallet, type: 'money' },
+    { title: 'Ventas netas', key: 'netSales', icon: Wallet, type: 'money' },
     { title: 'Ventas brutas', key: 'grossSales', icon: Receipt, type: 'money' },
     { title: 'Descuentos totales', key: 'totalDiscount', icon: HandCoins, type: 'money' },
     { title: 'Cantidad de ventas', key: 'salesCount', icon: ShoppingBag, type: 'number' },
@@ -51,27 +55,42 @@ export default function AnalyticsDashboard() {
   ], []);
 
   return (
-    <main className="dark min-h-screen bg-gradient-to-b from-slate-950 via-[#0d1b2f] to-slate-950 px-4 py-6 text-ink md:px-8">
-      <section className="mx-auto flex w-full max-w-7xl flex-col gap-4">
-        <header>
-          <h1 className="text-2xl font-semibold text-white">Dashboard Analítico</h1>
-          <p className="text-sm text-slate-300">Lectura rápida de ventas, cobranzas, deuda, descuentos y devoluciones.</p>
-        </header>
+    <main className="page analytics-page">
+      <header className="inventory-header analytics-header">
+        <div>
+          <p className="inventory-kicker">Gestion comercial</p>
+          <h1>Analitica</h1>
+          <p className="analytics-header__summary">Ventas, cobranzas, deuda, descuentos y devoluciones del kiosko.</p>
+        </div>
+        <span className="inventory-header__status">{loading ? 'Actualizando...' : 'Datos sincronizados'}</span>
+      </header>
 
+      {error ? <p className="inventory-error" role="alert">{error}</p> : null}
+
+      <div className="card analytics-workspace">
         <FilterBar
           filters={filters}
           onChange={(key, value) => setFilters((prev) => ({ ...prev, [key]: value }))}
           sellers={metadata.sellers}
           clients={metadata.clients}
           onApply={loadAnalytics}
+          loading={loading}
         />
 
-        {loading ? <p className="rounded-xl bg-panelSoft p-4 text-slate-300">Cargando analítica...</p> : null}
-        {error ? <p className="rounded-xl bg-rose-900/40 p-4 text-rose-200">{error}</p> : null}
+        {loading ? (
+          <section className="analytics-loading" aria-busy="true" aria-label="Cargando analitica">
+            {cards.map((card) => (
+              <article key={card.key} className="inventory-metric analytics-skeleton">
+                <span>{card.title}</span>
+                <strong>Cargando...</strong>
+              </article>
+            ))}
+          </section>
+        ) : null}
 
         {!loading && data ? (
           <>
-            <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <section className="analytics-kpis" aria-label="Metricas principales">
               {cards.map((card) => (
                 <KpiCard key={card.key} title={card.title} value={kpis[card.key]} type={card.type} change={changes[card.key]} icon={card.icon} sparkline={daily} />
               ))}
@@ -79,33 +98,37 @@ export default function AnalyticsDashboard() {
 
             <FinanceStrip finance={data.finance} />
 
-            <section className="grid gap-3 lg:grid-cols-2">
+            <section className="analytics-grid" aria-label="Graficos de ventas">
               <SalesTrendChart data={data.charts?.dailySales} />
               <PaymentMethodsChart data={data.charts?.paymentMethods} />
               <HourlySalesChart data={data.charts?.hourlySales} />
               <ProductRanking title="Top productos vendidos" rows={data.charts?.topProducts} />
             </section>
 
-            <section className="grid gap-3 lg:grid-cols-2">
-              <article className="rounded-2xl border border-panelBorder bg-panelSoft p-4">
-                <h3 className="mb-3 text-sm font-semibold text-slate-200">Devoluciones</h3>
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="rounded-xl bg-slate-900/60 p-3">
-                    <p className="text-xs uppercase text-slate-400">Cantidad devuelta</p>
-                    <p className="text-xl font-semibold text-rose-300">{data.charts?.returns?.quantity || 0} u.</p>
+            <section className="analytics-grid" aria-label="Devoluciones">
+              <article className="analytics-panel">
+                <h3>Devoluciones</h3>
+                <div className="analytics-return-grid">
+                  <div className="analytics-summary-box analytics-summary-box--danger">
+                    <span>Cantidad devuelta</span>
+                    <strong>{data.charts?.returns?.quantity || 0} u.</strong>
                   </div>
-                  <div className="rounded-xl bg-slate-900/60 p-3">
-                    <p className="text-xs uppercase text-slate-400">Monto perdido</p>
-                    <p className="text-xl font-semibold text-rose-300">${Number(data.charts?.returns?.amount || 0).toLocaleString('es-AR')}</p>
+                  <div className="analytics-summary-box analytics-summary-box--danger">
+                    <span>Monto perdido</span>
+                    <strong>${Number(data.charts?.returns?.amount || 0).toLocaleString('es-AR')}</strong>
                   </div>
                 </div>
               </article>
 
-              <ProductRanking title="Productos más devueltos" rows={data.charts?.returns?.topReturnedProducts} showAmount />
+              <ProductRanking title="Productos mas devueltos" rows={data.charts?.returns?.topReturnedProducts} showAmount />
             </section>
           </>
         ) : null}
-      </section>
+
+        {!loading && !data && !error ? (
+          <p className="inventory-table__empty">No hay datos de analitica para el rango seleccionado.</p>
+        ) : null}
+      </div>
     </main>
   );
 }
