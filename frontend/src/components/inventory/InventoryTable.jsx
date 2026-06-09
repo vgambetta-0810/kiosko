@@ -1,9 +1,10 @@
 import { memo } from 'react';
 import InventoryRowActions from './InventoryRowActions';
 import StockBadge from './StockBadge';
+import { getProductCodeLabel } from '../../utils/products';
 
 const columns = [
-  { key: 'sku', label: 'SKU' },
+  { key: 'codigoBarras', label: 'Código de barras' },
   { key: 'name', label: 'Nombre' },
   { key: 'category', label: 'Categoria' },
   { key: 'stock', label: 'Stock' },
@@ -61,7 +62,7 @@ function InventoryTable({ products, sort, onSort, onEdit, onDuplicate, onHistory
             {!loading
               ? products.map((product) => (
                   <tr key={product.productId}>
-                    <td className="inventory-table__muted">{product.sku || product.codigoBarras || product.productId}</td>
+                    <td className="inventory-table__muted">{getProductCodeLabel(product)}</td>
                     <td>
                       <strong>{product.name}</strong>
                       <span>{product.supplierName}</span>

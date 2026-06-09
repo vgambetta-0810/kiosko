@@ -1,127 +1,150 @@
-const Sale = require('../models/Sale');
-const Product = require('../models/Product');
-const User = require('../models/User');
-const { Op } = require('../models');
+const { Op, Sale, Product, User } = require('../models');
 const { withTransaction, adjustStock } = require('./stock.service');
 const { addMovement } = require('./account.service');
+const ApiError = require('../utils/ApiError');
+const { KINDS, ensureDefaultSaleOptions, findSaleOptionByCode } = require('../utils/saleOptions');
 
-const normalizeItem = (item) => ({
-  productId: item.productId || item.product,
-  quantity: Number(item.quantity)
-});
+const activeSaleWhere = { deletedAt: null };
 
 const consolidateItems = (items) => {
   const byProduct = new Map();
-
-  for (const item of items) {
-    if (!item.productId) throw new Error('Product is required');
-    if (!Number.isFinite(item.quantity) || item.quantity === 0) throw new Error('Quantity cannot be 0');
-
-    byProduct.set(item.productId, (byProduct.get(item.productId) || 0) + item.quantity);
+  for (const rawItem of items || []) {
+    const quantity = Number(rawItem.quantity);
+    if (!rawItem.productId || Number.isNaN(quantity) || quantity === 0) {
+      throw new ApiError(400, 'Quantity must be different from 0');
+    }
+    byProduct.set(rawItem.productId, (byProduct.get(rawItem.productId) || 0) + quantity);
   }
 
-  return Array.from(byProduct.entries())
-    .map(([productId, quantity]) => ({ productId, quantity }))
-    .filter((item) => item.quantity !== 0);
+  return [...byProduct.entries()]
+    .filter(([, quantity]) => quantity !== 0)
+    .map(([productId, quantity]) => ({ productId, quantity }));
 };
 
-exports.createSale = async ({ clientId, client, items, discount = 0, paymentMethod, status = 'PAID', createdBy }) =>
-  withTransaction(async (transaction) => {
-    const normalizedItems = consolidateItems((items || []).map(normalizeItem));
-    const resolvedClientId = clientId || client || null;
+const addProductsToSaleItems = async (sale) => {
+  const raw = sale.toJSON ? sale.toJSON() : sale;
+  const items = raw.items || [];
+  const productIds = [...new Set(items.map((item) => item.productId).filter(Boolean))];
+  const products = productIds.length ? await Product.findAll({ where: { id: productIds }, attributes: ['id', 'name', 'price', 'sku', 'codigoBarras'] }) : [];
+  const productsById = new Map(products.map((product) => [product.id, product.toJSON()]));
 
-    if (!normalizedItems.length) throw new Error('Sale has no effective items');
+  return {
+    ...raw,
+    items: items.map((item) => ({
+      ...item,
+      product: productsById.get(item.productId) || null
+    }))
+  };
+};
+
+exports.createSale = async ({ sellerId, createdBy, clientId = null, items, discount = 0, paymentMethod, status = 'PAID' }) => {
+  await ensureDefaultSaleOptions();
+  return withTransaction(async (session) => {
+    const effectiveSellerId = sellerId || createdBy;
+    if (!effectiveSellerId) throw new ApiError(400, 'Seller is required');
+
+    const [paymentOption, saleTypeOption] = await Promise.all([
+      findSaleOptionByCode(KINDS.PAYMENT_METHOD, paymentMethod),
+      findSaleOptionByCode(KINDS.SALE_TYPE, status)
+    ]);
+    if (!paymentOption) throw new ApiError(400, 'Metodo de pago invalido');
+    if (!saleTypeOption) throw new ApiError(400, 'Tipo de venta invalido');
+    if (saleTypeOption.requiresClient && !clientId) throw new ApiError(400, 'El cliente es obligatorio para este tipo de venta');
 
     let total = 0;
-    const saleItems = [];
+    const preparedItems = [];
+    const consolidatedItems = consolidateItems(items);
 
-    for (const item of normalizedItems) {
-      const product = await Product.findByPk(item.productId, { transaction });
-      if (!product) throw new Error('Product not found');
+    if (!consolidatedItems.length) throw new ApiError(400, 'Sale has no effective items');
 
-      if (item.quantity > 0 && product.stock < item.quantity) {
-        throw new Error(`Insufficient stock for ${product.name}`);
-      }
+    for (const rawItem of consolidatedItems) {
+      const product = await Product.findByPk(rawItem.productId, { transaction: session });
+      if (!product) throw new ApiError(404, 'Product not found');
+      if (rawItem.quantity > 0 && product.stock < rawItem.quantity) throw new ApiError(400, `Insufficient stock for ${product.name}`);
 
-      const itemPrice = Number(product.price);
-      total += item.quantity * itemPrice;
-      saleItems.push({ productId: product.id, quantity: item.quantity, price: itemPrice });
+      preparedItems.push({
+        productId: product.id,
+        quantity: rawItem.quantity,
+        price: product.price
+      });
+      total += rawItem.quantity * product.price;
     }
 
-    const numericDiscount = Number(discount) || 0;
-    if (numericDiscount < 0) throw new Error('Discount cannot be negative');
+    if (total >= 0 && discount > total) throw new ApiError(400, 'Discount cannot exceed total');
 
-    const discountCap = Math.max(0, total);
-    if (numericDiscount > discountCap) throw new Error('Discount cannot exceed total');
-
-    const normalizedStatus = status === 'PENDING' ? 'PENDING' : 'PAID';
-    if (normalizedStatus === 'PENDING') {
-      if (!resolvedClientId) throw new Error('Client is required for pending sales');
-      const clientExists = await User.findOne({ where: { id: resolvedClientId, isActive: true }, transaction });
-      if (!clientExists) throw new Error('Client not found');
-    }
-
-    const finalTotal = total - numericDiscount;
+    const finalTotal = total - discount;
     const sale = await Sale.create(
-      {
-        sellerId: createdBy,
-        clientId: resolvedClientId,
-        items: saleItems,
-        total,
-        discount: numericDiscount,
-        finalTotal,
-        paymentMethod,
-        status: normalizedStatus
-      },
-      { transaction }
+      { sellerId: effectiveSellerId, clientId: clientId || null, items: preparedItems, total, discount, finalTotal, paymentMethod, status },
+      { transaction: session }
     );
 
-    for (const item of saleItems) {
-      const isReturn = item.quantity < 0;
+    for (const item of preparedItems) {
       await adjustStock({
         productId: item.productId,
-        type: isReturn ? 'RETURN' : 'OUT',
+        type: item.quantity < 0 ? 'RETURN' : 'OUT',
         quantity: Math.abs(item.quantity),
-        reason: isReturn ? 'SALE_RETURN' : 'SALE',
+        reason: 'SALE',
         referenceType: 'Sale',
         referenceId: sale.id,
-        userId: createdBy,
-        session: transaction
+        userId: effectiveSellerId,
+        session
       });
     }
 
-    if (normalizedStatus === 'PENDING' && finalTotal > 0) {
+    if (saleTypeOption.requiresClient) {
       await addMovement({
         ownerType: 'CLIENT',
-        ownerId: resolvedClientId,
+        ownerId: clientId,
         type: 'DEBT',
         amount: finalTotal,
-        createdBy,
-        session: transaction,
-        notes: `Pending sale ${sale.id}`
+        createdBy: effectiveSellerId,
+        session,
+        notes: `PENDING SALE ${sale.id}`
       });
     }
 
     return sale;
   });
+};
 
 exports.listSales = async ({ dateFrom, dateTo, sellerId, clientId }) => {
-  const where = { deletedAt: null };
+  const where = { ...activeSaleWhere };
+
   if (sellerId) where.sellerId = sellerId;
   if (clientId) where.clientId = clientId;
-
   if (dateFrom || dateTo) {
     where.createdAt = {};
     if (dateFrom) where.createdAt[Op.gte] = new Date(dateFrom);
     if (dateTo) where.createdAt[Op.lte] = new Date(dateTo);
   }
 
-  return Sale.findAll({
+  const sales = await Sale.findAll({
     where,
     include: [
-      { model: User, as: 'seller', attributes: ['id', 'name', 'email', 'role'] },
-      { model: User, as: 'client', attributes: ['id', 'name', 'email', 'role'] }
+      { model: User, as: 'seller', attributes: ['id', 'name', 'email'] },
+      { model: User, as: 'client', attributes: ['id', 'name', 'email'] }
     ],
     order: [['createdAt', 'DESC']]
   });
+
+  return Promise.all(sales.map(addProductsToSaleItems));
+};
+
+exports.getSaleById = async (id) => {
+  const sale = await Sale.findOne({
+    where: { id, ...activeSaleWhere },
+    include: [
+      { model: User, as: 'seller', attributes: ['id', 'name', 'email'] },
+      { model: User, as: 'client', attributes: ['id', 'name', 'email'] }
+    ]
+  });
+  if (!sale) throw new ApiError(404, 'Sale not found');
+  return addProductsToSaleItems(sale);
+};
+
+exports.softDeleteSale = async ({ id, userId }) => {
+  const sale = await Sale.findOne({ where: { id, ...activeSaleWhere } });
+  if (!sale) throw new ApiError(404, 'Sale not found');
+  await sale.update({ deletedAt: new Date() });
+  return sale;
 };

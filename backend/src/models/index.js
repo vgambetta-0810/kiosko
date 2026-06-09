@@ -17,7 +17,7 @@ const Product = sequelize.define('Product', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   sku: { type: DataTypes.STRING, allowNull: true, unique: true },
   name: { type: DataTypes.STRING, allowNull: false },
-  codigoBarras: { type: DataTypes.STRING, allowNull: true },
+  codigoBarras: { type: DataTypes.STRING, allowNull: true, unique: true },
   category: { type: DataTypes.STRING, allowNull: false },
   categoryId: { type: DataTypes.UUID, allowNull: true },
   price: { type: DataTypes.FLOAT, allowNull: false },
@@ -70,6 +70,25 @@ const Sale = sequelize.define('Sale', {
   status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'PAID' },
   deletedAt: { type: DataTypes.DATE, allowNull: true }
 });
+
+const SaleOption = sequelize.define(
+  'SaleOption',
+  {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    kind: { type: DataTypes.STRING, allowNull: false },
+    code: { type: DataTypes.STRING, allowNull: false },
+    name: { type: DataTypes.STRING, allowNull: false },
+    normalizedName: { type: DataTypes.STRING, allowNull: false },
+    requiresClient: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true }
+  },
+  {
+    indexes: [
+      { unique: true, fields: ['kind', 'code'] },
+      { unique: true, fields: ['kind', 'normalizedName'] }
+    ]
+  }
+);
 
 const Purchase = sequelize.define('Purchase', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
@@ -128,6 +147,7 @@ module.exports = {
   StockMovement,
   Notification,
   Sale,
+  SaleOption,
   Purchase,
   Reservation,
   Account,

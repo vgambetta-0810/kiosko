@@ -42,13 +42,13 @@ exports.purchaseSchema = Joi.object({
 });
 
 exports.saleSchema = Joi.object({
-  clientId: Joi.string().hex().length(24).optional().allow(null),
+  clientId: Joi.string().guid({ version: ['uuidv4'] }).optional().allow(null, ''),
   items: Joi.array().items(
-    Joi.object({ productId: Joi.string().hex().length(24).required(), quantity: Joi.number().min(1).required() })
+    Joi.object({ productId: Joi.string().guid({ version: ['uuidv4'] }).required(), quantity: Joi.number().invalid(0).required() })
   ).min(1).required(),
   discount: Joi.number().min(0).default(0),
-  paymentMethod: Joi.string().valid('CASH', 'TRANSFER', 'CARD', 'MP').required(),
-  status: Joi.string().valid('PAID', 'PENDING').default('PAID')
+  paymentMethod: Joi.string().trim().required(),
+  status: Joi.string().trim().default('PAID')
 });
 
 exports.reservationSchema = Joi.object({

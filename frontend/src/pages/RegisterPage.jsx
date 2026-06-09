@@ -24,7 +24,7 @@ export default function RegisterPage() {
         role: canChooseRole ? role : 'CLIENT'
       });
       if (created.role === 'ADMIN') navigate('/admin', { replace: true });
-      else if (created.role === 'SELLER') navigate('/pos', { replace: true });
+      else if (created.role === 'SELLER') navigate('/ventas', { replace: true });
       else navigate('/client', { replace: true });
     } catch (err) {
       setError(err?.response?.data?.message || 'Error al registrar la cuenta');

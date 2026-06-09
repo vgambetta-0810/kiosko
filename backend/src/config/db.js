@@ -41,6 +41,24 @@ const ensureSchema = async () => {
       allowNull: true
     });
   }
+
+  const productIndexes = await queryInterface.showIndex('Products');
+  if (!productIndexes.some((index) => index.name === 'products_codigo_barras')) {
+    try {
+      await queryInterface.addIndex('Products', ['codigoBarras'], {
+        name: 'products_codigo_barras',
+        unique: true,
+        where: {
+          codigoBarras: {
+            [Sequelize.Op.ne]: null
+          }
+        }
+      });
+    } catch (err) {
+      if (!/unique constraint/i.test(err.message)) throw err;
+      console.warn('No se pudo crear el indice unico de codigo de barras porque existen duplicados previos');
+    }
+  }
 };
 
 const connectDB = async () => {

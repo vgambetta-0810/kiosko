@@ -1,4 +1,5 @@
 import { memo, useEffect, useState } from 'react';
+import { getProductCodeLabel } from '../../utils/products';
 
 function QuantityModal({ isOpen, product, onConfirm, onCancel, inputRef }) {
   const [quantity, setQuantity] = useState('1');
@@ -39,7 +40,7 @@ function QuantityModal({ isOpen, product, onConfirm, onCancel, inputRef }) {
         <h2 id="quantity-title">Cantidad</h2>
         <p className="pos-modal__product">{product.name}</p>
         <p className="pos-modal__meta">
-          SKU: {product.sku || product.codigoBarras || product.id} · Stock: {product.stock}
+          Código de barras: {getProductCodeLabel(product)} · Stock: {product.stock}
         </p>
         <form onSubmit={handleSubmit}>
           <input

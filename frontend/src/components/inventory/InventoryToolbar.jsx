@@ -8,7 +8,7 @@ function InventoryToolbar({ filters, categories, onFilterChange, onNewProduct })
           type="search"
           value={filters.search}
           onChange={(event) => onFilterChange('search', event.target.value)}
-          placeholder="Buscar por SKU, codigo, nombre o categoria"
+          placeholder="Buscar por código de barras, nombre o categoría"
         />
         <select value={filters.category} onChange={(event) => onFilterChange('category', event.target.value)}>
           <option value="">Todas las categorias</option>

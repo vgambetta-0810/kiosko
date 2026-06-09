@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 export default function usePosKeyboard({
   isModalOpen,
   onEscape,
-  onFocusSku,
+  onFocusBarcode,
   onGoCheckout,
   onFinalize,
   canGoCheckout,
@@ -22,7 +22,7 @@ export default function usePosKeyboard({
 
       if (event.key === 'F2') {
         event.preventDefault();
-        onFocusSku();
+        onFocusBarcode();
         return;
       }
 
@@ -40,7 +40,7 @@ export default function usePosKeyboard({
 
       if (event.key === 'Escape' && !isModalOpen) {
         event.preventDefault();
-        onFocusSku();
+        onFocusBarcode();
         return;
       }
 
@@ -51,5 +51,5 @@ export default function usePosKeyboard({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen, onEscape, onFocusSku, onGoCheckout, onFinalize, canGoCheckout, canFinalize]);
+  }, [isModalOpen, onEscape, onFocusBarcode, onGoCheckout, onFinalize, canGoCheckout, canFinalize]);
 }

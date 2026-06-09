@@ -1,6 +1,7 @@
 const asyncHandler = require('../utils/asyncHandler');
 const Category = require('../models/Category');
 const { Op } = require('../models');
+const { findCategoryByName, findOrCreateCategory, normalizeCategoryName } = require('../utils/categories');
 
 exports.list = asyncHandler(async (req, res) => {
   const q = String(req.query.q || '').trim();
@@ -10,12 +11,12 @@ exports.list = asyncHandler(async (req, res) => {
 });
 
 exports.create = asyncHandler(async (req, res) => {
-  const name = String(req.body?.name || '').trim();
+  const name = normalizeCategoryName(req.body?.name);
   if (!name) return res.status(400).json({ message: 'El nombre de categoria es obligatorio' });
 
-  const existing = await Category.findOne({ where: { name } });
+  const existing = await findCategoryByName(name);
   if (existing) return res.json(existing);
 
-  const category = await Category.create({ name });
+  const category = await findOrCreateCategory(name);
   res.status(201).json(category);
 });

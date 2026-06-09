@@ -29,15 +29,18 @@ function ProductDrawer({ isOpen, mode, product, onClose, onSaved }) {
           form={formState.form}
           categories={formState.categories}
           selectedCategory={formState.selectedCategory}
+          categoryInput={formState.categoryInput}
           categoryLoading={formState.categoryLoading}
+          categoryError={formState.categoryError}
           saving={formState.saving}
           error={formState.error}
           mode={mode}
           onChange={formState.handleChange}
           onSubmit={formState.submit}
           onCategorySearch={formState.searchCategories}
-          onCategoryChange={formState.setSelectedCategory}
-          onCategoryInputChange={formState.setCategoryInput}
+          onCategorySelect={formState.selectCategory}
+          onCategoryInputChange={formState.changeCategoryInput}
+          onCategoryClear={formState.clearCategory}
         />
       </aside>
     </div>

@@ -1,19 +1,22 @@
 import { memo } from 'react';
-import { AsyncTypeahead } from 'react-bootstrap-typeahead';
+import CategoryCombobox from './CategoryCombobox';
 
 function ProductForm({
   form,
   categories,
   selectedCategory,
+  categoryInput,
   categoryLoading,
+  categoryError,
   saving,
   error,
   mode,
   onChange,
   onSubmit,
   onCategorySearch,
-  onCategoryChange,
-  onCategoryInputChange
+  onCategorySelect,
+  onCategoryInputChange,
+  onCategoryClear
 }) {
   return (
     <form className="product-form" onSubmit={onSubmit}>
@@ -22,35 +25,31 @@ function ProductForm({
         <input name="name" value={form.name} onChange={onChange} required />
       </label>
       <label>
-        SKU
-        <input name="sku" value={form.sku} onChange={onChange} placeholder="Opcional" />
-      </label>
-      <label>
-        Codigo de barras
-        <input name="codigoBarras" value={form.codigoBarras} onChange={onChange} placeholder="Opcional" />
-      </label>
-      <label>
-        Categoria
-        <AsyncTypeahead
-          id="inventory-product-category"
-          isLoading={categoryLoading}
-          minLength={0}
-          allowNew
-          onFocus={() => onCategorySearch('')}
-          onSearch={onCategorySearch}
-          options={categories}
-          labelKey="name"
-          selected={selectedCategory}
-          onChange={onCategoryChange}
-          onInputChange={onCategoryInputChange}
-          className="category-typeahead"
-          newSelectionPrefix="Crear categoria: "
-          placeholder="Buscar o crear categoria"
-          promptText="Escribi para buscar categoria"
-          searchText="Buscando categorias..."
-          emptyLabel="Sin coincidencias. Presiona Enter para crear."
+        Código de barras
+        <input
+          name="codigoBarras"
+          value={form.codigoBarras}
+          onChange={onChange}
+          placeholder="Escanear o ingresar código de barras"
         />
       </label>
+      <div className="product-form__field">
+        <label htmlFor="inventory-product-category">Categoria</label>
+        <CategoryCombobox
+          id="inventory-product-category"
+          value={categoryInput}
+          options={categories}
+          selectedOption={selectedCategory[0]}
+          isLoading={categoryLoading}
+          error={categoryError}
+          disabled={saving}
+          placeholder="Buscar categoría o crear nueva"
+          onSearch={onCategorySearch}
+          onSelect={onCategorySelect}
+          onInputChange={onCategoryInputChange}
+          onClear={onCategoryClear}
+        />
+      </div>
       <div className="product-form__grid">
         <label>
           Costo

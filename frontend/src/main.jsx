@@ -4,7 +4,6 @@ import { BrowserRouter } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
-import 'react-bootstrap-typeahead/css/Typeahead.css';
 import './styles/main.css';
 
 createRoot(document.getElementById('root')).render(

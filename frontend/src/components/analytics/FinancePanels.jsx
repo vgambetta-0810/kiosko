@@ -18,7 +18,7 @@ export function ProductRanking({ title, rows = [], showAmount = true }) {
               <tr key={`${row.productId}-${index}`}>
                 <td>
                   <strong>{row.product?.name || 'Producto'}</strong>
-                  <span className="inventory-table__muted">{row.product?.sku || row.productId}</span>
+                  <span className="inventory-table__muted">{row.product?.codigoBarras || row.product?.sku || row.productId}</span>
                 </td>
                 <td>{Number(row.quantity || 0)} u.</td>
                 {showAmount ? <td>{formatMoney(row.gross || row.amount || 0)}</td> : null}

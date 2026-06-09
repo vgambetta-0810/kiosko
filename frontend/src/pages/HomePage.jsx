@@ -6,7 +6,7 @@ export default function HomePage() {
 
   const links = [];
   if (user?.role === 'ADMIN') links.push({ to: '/admin', label: 'Ir al panel de administración' }, { to: '/stock', label: 'Ir a gestión de stock' });
-  if (user?.role === 'SELLER') links.push({ to: '/pos', label: 'Ir al punto de venta' });
+  if (user?.role === 'SELLER') links.push({ to: '/ventas', label: 'Nueva venta' });
   if (user?.role === 'CLIENT' || user?.role === 'PARENT') links.push({ to: '/client', label: 'Ir al panel de cliente' });
 
   return (

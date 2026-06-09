@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { getProductCodeLabel } from '../../utils/products';
 
 function SalesTable({ items, highlightedProductId, onUpdateQty, onRemove }) {
   return (
@@ -26,7 +27,7 @@ function SalesTable({ items, highlightedProductId, onUpdateQty, onRemove }) {
               <tr key={item.productId} className={isHighlighted ? 'pos-row-highlight' : ''}>
                 <td>
                   <strong>{item.name}</strong>
-                  <span>{item.sku || item.codigoBarras || item.productId}</span>
+                  <span>{getProductCodeLabel(item)}</span>
                 </td>
                 <td>
                   <input

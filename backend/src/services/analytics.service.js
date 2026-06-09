@@ -179,7 +179,7 @@ exports.getDashboardAnalytics = async ({ preset, dateFrom, dateTo, sellerId, cli
   const previous = aggregateSales(prevSales);
 
   const allProductIds = [...new Set([...current.topProducts, ...current.returnsByProduct].map((p) => p.productId))];
-  const products = allProductIds.length ? await Product.findAll({ where: { id: allProductIds }, attributes: ['id', 'name', 'sku', 'category'] }) : [];
+  const products = allProductIds.length ? await Product.findAll({ where: { id: allProductIds }, attributes: ['id', 'name', 'sku', 'codigoBarras', 'category'] }) : [];
   const productById = Object.fromEntries(products.map((p) => [p.id, p]));
 
   const withProductNames = (rows) =>

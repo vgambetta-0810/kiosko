@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import CheckoutStep from '../components/pos/CheckoutStep';
 import QuantityModal from '../components/pos/QuantityModal';
 import SalesTable from '../components/pos/SalesTable';
-import SKUInput from '../components/pos/SKUInput';
+import BarcodeInput from '../components/pos/BarcodeInput';
 import usePosKeyboard from '../hooks/usePosKeyboard';
 import { api } from '../services/api';
+import { getProductCodeLabel } from '../utils/products';
 
 const PRODUCT_LIMIT = 15;
 
@@ -33,7 +35,9 @@ const productMatchesExactCode = (product, query) => {
 export default function SellerPOS() {
   const [products, setProducts] = useState([]);
   const [clients, setClients] = useState([]);
-  const [skuQuery, setSkuQuery] = useState('');
+  const [paymentMethods, setPaymentMethods] = useState([]);
+  const [saleTypes, setSaleTypes] = useState([]);
+  const [barcodeQuery, setBarcodeQuery] = useState('');
   const [cart, setCart] = useState([]);
   const [discount, setDiscount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('CASH');
@@ -44,30 +48,49 @@ export default function SellerPOS() {
   const [highlightedProductId, setHighlightedProductId] = useState('');
   const [loading, setLoading] = useState(false);
   const [lookupLoading, setLookupLoading] = useState(false);
+  const [optionsLoading, setOptionsLoading] = useState(true);
+  const [optionsError, setOptionsError] = useState('');
+  const [clientsError, setClientsError] = useState('');
   const [message, setMessage] = useState('');
 
-  const skuInputRef = useRef(null);
+  const barcodeInputRef = useRef(null);
   const quantityInputRef = useRef(null);
   const highlightTimerRef = useRef(null);
+  const submitLockRef = useRef(false);
 
   const isQuantityModalOpen = Boolean(selectedProduct);
 
-  const focusSku = useCallback(() => {
+  const focusBarcode = useCallback(() => {
     window.requestAnimationFrame(() => {
-      skuInputRef.current?.focus();
-      skuInputRef.current?.select();
+      barcodeInputRef.current?.focus();
+      barcodeInputRef.current?.select();
     });
   }, []);
 
   useEffect(() => {
     const load = async () => {
       setMessage('');
+      setOptionsLoading(true);
+      setOptionsError('');
+      setClientsError('');
       try {
-        const [productsRes, clientsRes] = await Promise.all([api.get('/products'), api.get('/sales/clients')]);
+        const [productsRes, clientsRes, paymentMethodsRes, saleTypesRes] = await Promise.all([
+          api.get('/products'),
+          api.get('/sales/clients'),
+          api.get('/sales/options/payment-methods'),
+          api.get('/sales/options/sale-types')
+        ]);
         setProducts(productsRes.data.filter((product) => product.isActive));
         setClients(clientsRes.data);
+        setPaymentMethods(paymentMethodsRes.data || []);
+        setSaleTypes(saleTypesRes.data || []);
       } catch (error) {
-        setMessage(error?.response?.data?.message || 'No se pudo cargar la información del POS');
+        const loadError = error?.response?.data?.message || 'No se pudo cargar la información de ventas';
+        setMessage(loadError);
+        setOptionsError(loadError);
+        setClientsError(loadError);
+      } finally {
+        setOptionsLoading(false);
       }
     };
 
@@ -75,12 +98,12 @@ export default function SellerPOS() {
   }, []);
 
   useEffect(() => {
-    focusSku();
-  }, [focusSku]);
+    focusBarcode();
+  }, [focusBarcode]);
 
   useEffect(() => {
-    if (!isQuantityModalOpen && step === 'items') focusSku();
-  }, [focusSku, isQuantityModalOpen, step]);
+    if (!isQuantityModalOpen && step === 'items') focusBarcode();
+  }, [focusBarcode, isQuantityModalOpen, step]);
 
   useEffect(() => {
     return () => {
@@ -89,8 +112,8 @@ export default function SellerPOS() {
   }, []);
 
   const filteredProducts = useMemo(() => {
-    return products.filter((product) => productMatchesQuery(product, skuQuery)).slice(0, PRODUCT_LIMIT);
-  }, [products, skuQuery]);
+    return products.filter((product) => productMatchesQuery(product, barcodeQuery)).slice(0, PRODUCT_LIMIT);
+  }, [barcodeQuery, products]);
 
   const subtotal = useMemo(() => cart.reduce((acc, item) => acc + item.quantity * item.price, 0), [cart]);
   const safeDiscount = Number(discount) > subtotal ? subtotal : Number(discount) || 0;
@@ -109,7 +132,7 @@ export default function SellerPOS() {
 
   const closeQuantityModal = useCallback(() => {
     setSelectedProduct(null);
-    setSkuQuery('');
+    setBarcodeQuery('');
   }, []);
 
   const resolveProductByQuery = useCallback(
@@ -129,15 +152,24 @@ export default function SellerPOS() {
     [products]
   );
 
-  const handleSkuSubmit = useCallback(
+  const goCheckout = useCallback(() => {
+    if (!cart.length) {
+      setMessage('Cargá al menos un producto');
+      focusBarcode();
+      return;
+    }
+    setMessage('');
+    setStep('checkout');
+  }, [cart.length, focusBarcode]);
+
+  const handleBarcodeSubmit = useCallback(
     async (event) => {
       if (event.key !== 'Enter') return;
 
       event.preventDefault();
-      const query = skuQuery.trim();
+      const query = barcodeQuery.trim();
       if (!query) {
-        setMessage('Ingresá o escaneá un SKU');
-        focusSku();
+        goCheckout();
         return;
       }
 
@@ -148,18 +180,18 @@ export default function SellerPOS() {
         const product = await resolveProductByQuery(query);
         if (!product) {
           setMessage('Producto no encontrado o búsqueda ambigua');
-          focusSku();
+          focusBarcode();
           return;
         }
         openQuantityModal(product);
       } catch (error) {
         setMessage(error?.response?.data?.message || 'No se pudo buscar el producto');
-        focusSku();
+        focusBarcode();
       } finally {
         setLookupLoading(false);
       }
     },
-    [focusSku, openQuantityModal, resolveProductByQuery, skuQuery]
+    [barcodeQuery, focusBarcode, goCheckout, openQuantityModal, resolveProductByQuery]
   );
 
   const addQuantityToCart = useCallback(
@@ -189,8 +221,8 @@ export default function SellerPOS() {
           {
             productId,
             name: selectedProduct.name,
-            sku: selectedProduct.sku,
             codigoBarras: selectedProduct.codigoBarras,
+            legacyCode: selectedProduct.sku,
             price: Number(selectedProduct.price) || 0,
             stock: Number(selectedProduct.stock) || 0,
             quantity
@@ -222,28 +254,51 @@ export default function SellerPOS() {
     setCart((prev) => prev.filter((item) => item.productId !== productId));
   }, []);
 
-  const goCheckout = useCallback(() => {
-    if (!cart.length) {
-      setMessage('Cargá al menos un producto');
-      focusSku();
-      return;
-    }
-    setMessage('');
-    setStep('checkout');
-  }, [cart.length, focusSku]);
-
   const goItems = useCallback(() => {
     setStep('items');
     setMessage('');
-    focusSku();
-  }, [focusSku]);
+    focusBarcode();
+  }, [focusBarcode]);
+
+  const createPaymentMethod = useCallback(async (name) => {
+    const { data } = await api.post('/sales/options/payment-methods', { name });
+    setPaymentMethods((current) => [...current.filter((option) => option.id !== data.id), data]);
+    return data;
+  }, []);
+
+  const createSaleType = useCallback(async (name) => {
+    const { data } = await api.post('/sales/options/sale-types', { name });
+    setSaleTypes((current) => [...current.filter((option) => option.id !== data.id), data]);
+    return data;
+  }, []);
+
+  const createClient = useCallback(async (name) => {
+    const { data } = await api.post('/sales/clients', { name });
+    setClients((current) => [...current.filter((client) => client.id !== data.id), data]);
+    return data;
+  }, []);
 
   const submitSale = useCallback(async () => {
+    if (submitLockRef.current) return;
     if (!cart.length) {
       setMessage('Cargá al menos un producto');
       return;
     }
+    if (!paymentMethod) {
+      setMessage('Seleccioná un método de pago');
+      return;
+    }
+    const selectedSaleType = saleTypes.find((option) => option.code === status);
+    if (!selectedSaleType) {
+      setMessage('Seleccioná un tipo de venta');
+      return;
+    }
+    if (selectedSaleType.requiresClient && !clientId) {
+      setMessage('El cliente es obligatorio para ventas fiadas');
+      return;
+    }
 
+    submitLockRef.current = true;
     setLoading(true);
     setMessage('');
 
@@ -266,18 +321,19 @@ export default function SellerPOS() {
 
       const productsRes = await api.get('/products');
       setProducts(productsRes.data.filter((product) => product.isActive));
-      focusSku();
+      focusBarcode();
     } catch (error) {
       setMessage(error?.response?.data?.message || 'No se pudo registrar la venta');
     } finally {
+      submitLockRef.current = false;
       setLoading(false);
     }
-  }, [cart, clientId, focusSku, paymentMethod, safeDiscount, status]);
+  }, [cart, clientId, focusBarcode, paymentMethod, safeDiscount, saleTypes, status]);
 
   usePosKeyboard({
     isModalOpen: isQuantityModalOpen,
     onEscape: closeQuantityModal,
-    onFocusSku: focusSku,
+    onFocusBarcode: focusBarcode,
     onGoCheckout: goCheckout,
     onFinalize: submitSale,
     canGoCheckout: step === 'items' && cart.length > 0,
@@ -288,12 +344,17 @@ export default function SellerPOS() {
     <div className="page pos-page">
       <header className="pos-header">
         <div>
-          <p className="pos-kicker">Caja registradora</p>
-          <h1>Seller POS</h1>
+          <p className="pos-kicker">Ventas</p>
+          <h1>Nueva venta</h1>
         </div>
-        <div className="pos-total-card">
-          <span>Total</span>
-          <strong>${finalTotal.toFixed(2)}</strong>
+        <div className="pos-header__actions">
+          <Link to="/ventas/historial" className="pos-history-link">
+            Ver historial
+          </Link>
+          <div className="pos-total-card">
+            <span>Total</span>
+            <strong>${finalTotal.toFixed(2)}</strong>
+          </div>
         </div>
       </header>
 
@@ -301,11 +362,11 @@ export default function SellerPOS() {
         {step === 'items' ? (
           <>
             <section className="pos-entry-panel">
-              <SKUInput
-                value={skuQuery}
-                onChange={setSkuQuery}
-                onSubmit={handleSkuSubmit}
-                inputRef={skuInputRef}
+              <BarcodeInput
+                value={barcodeQuery}
+                onChange={setBarcodeQuery}
+                onSubmit={handleBarcodeSubmit}
+                inputRef={barcodeInputRef}
                 disabled={lookupLoading || loading}
                 loading={lookupLoading}
               />
@@ -315,7 +376,7 @@ export default function SellerPOS() {
                   <button key={getEntityId(product)} type="button" onClick={() => openQuantityModal(product)}>
                     <span>{product.name}</span>
                     <small>
-                      {product.sku || product.codigoBarras || getEntityId(product)} · ${Number(product.price).toFixed(2)} · Stock {product.stock}
+                      {getProductCodeLabel(product)} · ${Number(product.price).toFixed(2)} · Stock {product.stock}
                     </small>
                   </button>
                 ))}
@@ -338,6 +399,8 @@ export default function SellerPOS() {
           <CheckoutStep
             cart={cart}
             clients={clients}
+            paymentMethods={paymentMethods}
+            saleTypes={saleTypes}
             clientId={clientId}
             status={status}
             paymentMethod={paymentMethod}
@@ -345,12 +408,18 @@ export default function SellerPOS() {
             subtotal={subtotal}
             finalTotal={finalTotal}
             loading={loading}
+            optionsLoading={optionsLoading}
+            optionsError={optionsError}
+            clientsError={clientsError}
             onBack={goItems}
             onSubmit={submitSale}
             onClientChange={setClientId}
             onStatusChange={setStatus}
             onPaymentMethodChange={setPaymentMethod}
             onDiscountChange={setDiscount}
+            onCreatePaymentMethod={createPaymentMethod}
+            onCreateSaleType={createSaleType}
+            onCreateClient={createClient}
           />
         )}
 

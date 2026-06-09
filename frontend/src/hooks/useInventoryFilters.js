@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { LOW_STOCK_LIMIT } from './useInventoryProducts';
+import { getProductCode } from '../utils/products';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50];
 
@@ -53,7 +54,7 @@ export default function useInventoryFilters(products) {
     const category = normalize(filters.category);
 
     return products.filter((product) => {
-      const searchable = [product.sku, product.codigoBarras, product.name, product.category, product.productId]
+      const searchable = [getProductCode(product), product.sku, product.name, product.category, product.productId]
         .map(normalize)
         .join(' ');
       const matchesSearch = search ? searchable.includes(search) : true;
@@ -68,8 +69,8 @@ export default function useInventoryFilters(products) {
   const sortedProducts = useMemo(() => {
     return filteredProducts.slice().sort((a, b) => {
       const key = sort.key;
-      const left = key === 'status' ? getStockStatus(a.stock) : a[key];
-      const right = key === 'status' ? getStockStatus(b.stock) : b[key];
+      const left = key === 'status' ? getStockStatus(a.stock) : key === 'codigoBarras' ? getProductCode(a) : a[key];
+      const right = key === 'status' ? getStockStatus(b.stock) : key === 'codigoBarras' ? getProductCode(b) : b[key];
       return compareValues(left, right, sort.direction);
     });
   }, [filteredProducts, sort]);
