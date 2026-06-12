@@ -82,33 +82,32 @@ export default function ResponsiveNavbar() {
     ));
 
   return (
-    <nav className="top-nav" aria-label="Navegacion principal">
-      <div className="top-nav__brand" aria-hidden="true">Kiosko</div>
+    <>
+      <nav className="top-nav" aria-label="Navegacion principal">
+        <div className="top-nav__brand" aria-hidden="true">Kiosko</div>
 
-      <div className="top-nav__links top-nav__links--desktop">
-        {renderLinks('desktop')}
-      </div>
+        <div className="top-nav__links top-nav__links--desktop">
+          {renderLinks('desktop')}
+        </div>
 
-      <button type="button" className="logout-btn logout-btn--desktop" onClick={handleLogout}>
-        Cerrar sesion
-      </button>
+        <button type="button" className="logout-btn logout-btn--desktop" onClick={handleLogout}>
+          Cerrar sesion
+        </button>
 
-      <button
-        ref={menuButtonRef}
-        type="button"
-        className="top-nav__menu-button"
-        aria-label={isMenuOpen ? 'Cerrar menu' : 'Abrir menu'}
-        aria-expanded={isMenuOpen}
-        aria-controls={menuId}
-        onClick={() => setIsMenuOpen((current) => !current)}
-      >
-        {isMenuOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
-      </button>
+        <button
+          ref={menuButtonRef}
+          type="button"
+          className="top-nav__menu-button"
+          aria-label={isMenuOpen ? 'Cerrar menu' : 'Abrir menu'}
+          aria-expanded={isMenuOpen}
+          aria-controls={menuId}
+          onClick={() => setIsMenuOpen((current) => !current)}
+        >
+          {isMenuOpen ? <X size={22} aria-hidden="true" /> : <Menu size={22} aria-hidden="true" />}
+        </button>
+      </nav>
 
-      <div
-        className={`top-nav__mobile-layer${isMenuOpen ? ' is-open' : ''}`}
-        aria-hidden={!isMenuOpen}
-      >
+      <div className={`top-nav__mobile-layer${isMenuOpen ? ' is-open' : ''}`} hidden={!isMenuOpen}>
         <button
           type="button"
           className="top-nav__backdrop"
@@ -137,6 +136,6 @@ export default function ResponsiveNavbar() {
           </div>
         </div>
       </div>
-    </nav>
+    </>
   );
 }
