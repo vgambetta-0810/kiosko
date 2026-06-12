@@ -1102,7 +1102,7 @@ a {
 .inventory-row-actions button,
 .inventory-pagination button,
 .product-drawer__close,
-.movement-history button {
+.movement-history__filters button {
   min-height: 32px;
   padding: 7px 9px;
   border: 1px solid var(--border);
@@ -1116,7 +1116,7 @@ a {
 .inventory-row-actions button:hover,
 .inventory-pagination button:hover:not(:disabled),
 .product-drawer__close:hover,
-.movement-history button:hover {
+.movement-history__filters button:hover {
   background: var(--hover);
 }
 
@@ -1247,6 +1247,56 @@ a {
   margin-top: 14px;
 }
 
+.movement-history__header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.movement-history__title {
+  display: block;
+  margin: 0;
+  font-size: 1.45rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.movement-history__header svg {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  transition: transform 180ms ease, color 180ms ease;
+}
+
+.movement-history__header:hover svg {
+  color: var(--primary);
+}
+
+.movement-history__panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 240ms ease;
+}
+
+.movement-history--open .movement-history__panel {
+  grid-template-rows: 1fr;
+}
+
+.movement-history__content {
+  overflow: hidden;
+}
+
+.movement-history--open .movement-history__content {
+  padding-top: 14px;
+}
+
 .movement-history__filters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -1258,10 +1308,6 @@ a {
   margin: 8px 0;
   color: var(--text-secondary);
   font-size: 0.84rem;
-}
-
-.inventory-reservations {
-  margin-top: 14px;
 }
 
 .sales-page {
