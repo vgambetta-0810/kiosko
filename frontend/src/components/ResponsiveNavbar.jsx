@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Menu, X } from 'lucide-react';
+import { Menu, Moon, Sun, X } from 'lucide-react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 const buildNavLinks = (role) => {
   const links = [{ to: '/', label: 'Inicio' }];
@@ -27,6 +28,7 @@ const buildNavLinks = (role) => {
 
 export default function ResponsiveNavbar() {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
   const menuId = useId();
@@ -79,6 +81,19 @@ export default function ResponsiveNavbar() {
       </NavLink>
     ));
 
+  const renderThemeToggle = (variant) => (
+    <button
+      type="button"
+      className={`theme-toggle theme-toggle--${variant}`}
+      onClick={toggleTheme}
+      aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+      title={theme === 'dark' ? 'Modo Oscuro' : 'Modo Claro'}
+    >
+      {theme === 'dark' ? <Moon size={16} aria-hidden="true" /> : <Sun size={16} aria-hidden="true" />}
+      <span>{theme === 'dark' ? 'Modo Oscuro' : 'Modo Claro'}</span>
+    </button>
+  );
+
   return (
     <>
       <nav className="top-nav" aria-label="Navegacion principal">
@@ -88,9 +103,12 @@ export default function ResponsiveNavbar() {
           {renderLinks('desktop')}
         </div>
 
-        <button type="button" className="logout-btn logout-btn--desktop" onClick={handleLogout}>
-          Cerrar sesion
-        </button>
+        <div className="top-nav__actions top-nav__actions--desktop">
+          {renderThemeToggle('desktop')}
+          <button type="button" className="logout-btn logout-btn--desktop" onClick={handleLogout}>
+            Cerrar sesion
+          </button>
+        </div>
 
         <button
           ref={menuButtonRef}
@@ -128,6 +146,7 @@ export default function ResponsiveNavbar() {
           </div>
           <div className="top-nav__links top-nav__links--mobile">
             {renderLinks('mobile')}
+            {renderThemeToggle('mobile')}
             <button type="button" className="logout-btn logout-btn--mobile" onClick={handleLogout}>
               Cerrar sesion
             </button>
