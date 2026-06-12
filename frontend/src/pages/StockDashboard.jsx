@@ -13,7 +13,6 @@ export default function StockDashboard() {
   const {
     products,
     metrics,
-    reservations,
     selectedProduct,
     movements,
     movementFilters,
@@ -107,45 +106,6 @@ export default function StockDashboard() {
         onFilterChange={handleMovementFilterChange}
         onApplyFilters={applyMovementFilters}
       />
-
-      <section className="card inventory-reservations">
-        <h2>Reservas de clientes</h2>
-        <div className="inventory-table-scroll">
-          <table className="inventory-table inventory-table--compact">
-            <thead>
-              <tr>
-                <th>Cliente</th>
-                <th>Estado</th>
-                <th>Total</th>
-                <th>Vence</th>
-                <th>Productos</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reservations.map((reservation) => (
-                <tr key={reservation.id || reservation._id}>
-                  <td>{reservation.client?.name || 'Sin cliente'}</td>
-                  <td>{reservation.status}</td>
-                  <td>${Number(reservation.total || 0).toFixed(2)}</td>
-                  <td>{reservation.expiresAt ? new Date(reservation.expiresAt).toLocaleDateString() : '-'}</td>
-                  <td>
-                    {(reservation.items || [])
-                      .map((item) => `${item.product?.name || 'Producto'} x${item.quantity}`)
-                      .join(', ')}
-                  </td>
-                </tr>
-              ))}
-              {reservations.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="inventory-table__empty">
-                    No hay reservas registradas.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </section>
 
       <ProductDrawer
         isOpen={drawerState.isOpen}

@@ -131,7 +131,6 @@ export default function useInventoryProducts() {
   return {
     products: productsWithInventory,
     metrics,
-    reservations,
     selectedProduct,
     movements,
     movementFilters,
