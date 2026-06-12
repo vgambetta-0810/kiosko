@@ -16,9 +16,9 @@ const tooltipStyle = {
   boxShadow: 'var(--shadow-soft)'
 };
 
-function ChartPanel({ title, children, isEmpty }) {
+function ChartPanel({ title, children, isEmpty, className = '' }) {
   return (
-    <article className="analytics-chart-panel">
+    <article className={`analytics-chart-panel ${className}`.trim()}>
       <h3>{title}</h3>
       {isEmpty ? <p className="analytics-empty-state">Sin datos en el rango seleccionado.</p> : children}
     </article>
@@ -27,7 +27,7 @@ function ChartPanel({ title, children, isEmpty }) {
 
 export function SalesTrendChart({ data = [] }) {
   return (
-    <ChartPanel title="Ventas por dia" isEmpty={!data.length}>
+    <ChartPanel title="Ventas por dia" isEmpty={!data.length} className="analytics-chart-panel--primary">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data}>
           <CartesianGrid stroke={gridColor} strokeDasharray="3 3" />
@@ -48,7 +48,7 @@ export function PaymentMethodsChart({ data = [] }) {
     <ChartPanel title="Metodos de pago" isEmpty={!data.length}>
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
-          <Pie data={data} dataKey="amount" nameKey="method" outerRadius={88} innerRadius={50}>
+          <Pie data={data} dataKey="amount" nameKey="method" outerRadius="78%" innerRadius="46%">
             {data.map((entry, index) => <Cell key={entry.method} fill={colors[index % colors.length]} />)}
           </Pie>
           <Tooltip formatter={(value) => formatMoney(value)} contentStyle={tooltipStyle} />
@@ -61,7 +61,7 @@ export function PaymentMethodsChart({ data = [] }) {
 
 export function HourlySalesChart({ data = [] }) {
   return (
-    <ChartPanel title="Ventas por hora" isEmpty={!data.length}>
+    <ChartPanel title="Ventas por hora" isEmpty={!data.length} className="analytics-chart-panel--compact">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data}>
           <CartesianGrid stroke={gridColor} strokeDasharray="3 3" />

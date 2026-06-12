@@ -1,8 +1,8 @@
 const formatMoney = (value) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(Number(value || 0));
 
-export function ProductRanking({ title, rows = [], showAmount = true }) {
+export function ProductRanking({ title, rows = [], showAmount = true, className = '' }) {
   return (
-    <section className="analytics-panel">
+    <section className={`analytics-panel ${className}`.trim()}>
       <h3>{title}</h3>
       <div className="inventory-table-card analytics-ranking-table">
         <table className="inventory-table inventory-table--compact">
@@ -38,22 +38,3 @@ export function ProductRanking({ title, rows = [], showAmount = true }) {
   );
 }
 
-export function FinanceStrip({ finance }) {
-  const items = [
-    { label: 'Cobrado real', value: finance?.collected, tone: 'success' },
-    { label: 'Deuda pendiente', value: finance?.pendingDebt, tone: 'warning' },
-    { label: 'Descuentos', value: finance?.discounts, tone: 'info' },
-    { label: 'Perdida por devoluciones', value: finance?.returnsLost, tone: 'danger' }
-  ];
-
-  return (
-    <section className="analytics-finance-strip" aria-label="Resumen financiero">
-      {items.map((item) => (
-        <article key={item.label} className={`analytics-summary-box analytics-summary-box--${item.tone}`}>
-          <span>{item.label}</span>
-          <strong>{formatMoney(item.value || 0)}</strong>
-        </article>
-      ))}
-    </section>
-  );
-}

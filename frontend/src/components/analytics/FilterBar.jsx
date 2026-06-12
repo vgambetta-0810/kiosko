@@ -1,4 +1,4 @@
-export default function FilterBar({ filters, onChange, sellers = [], clients = [], onApply, loading = false }) {
+export default function FilterBar({ filters, onChange, sellers = [], clients = [] }) {
   return (
     <section className="analytics-filterbar" aria-label="Filtros de analitica">
       <label>
@@ -32,9 +32,6 @@ export default function FilterBar({ filters, onChange, sellers = [], clients = [
           {clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}
         </select>
       </label>
-      <button type="button" className="inventory-primary-action" onClick={onApply} disabled={loading}>
-        {loading ? 'Aplicando...' : 'Aplicar filtros'}
-      </button>
     </section>
   );
 }

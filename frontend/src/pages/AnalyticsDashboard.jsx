@@ -1,19 +1,48 @@
-import { useEffect, useMemo, useState } from 'react';
-import { BarChart3, Wallet, Receipt, ShoppingBag, Clock3, HandCoins } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BarChart3, Wallet, ShoppingBag, Clock3 } from 'lucide-react';
 import { api } from '../services/api';
 import FilterBar from '../components/analytics/FilterBar';
 import KpiCard from '../components/analytics/KpiCard';
 import { SalesTrendChart, PaymentMethodsChart, HourlySalesChart } from '../components/analytics/Charts';
-import { ProductRanking, FinanceStrip } from '../components/analytics/FinancePanels';
+import { ProductRanking } from '../components/analytics/FinancePanels';
 
-const today = new Date().toISOString().slice(0, 10);
+const formatDateInput = (date) => {
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getPresetRange = (preset) => {
+  const now = new Date();
+  const from = new Date(now);
+
+  if (preset === 'week') from.setDate(now.getDate() - 6);
+  if (preset === 'month') from.setDate(now.getDate() - 29);
+
+  return {
+    dateFrom: formatDateInput(from),
+    dateTo: formatDateInput(now)
+  };
+};
+
+const createInitialFilters = () => ({ preset: 'today', ...getPresetRange('today'), sellerId: '', clientId: '' });
+
+const isValidDateRange = ({ dateFrom, dateTo }) => {
+  if (!dateFrom || !dateTo) return false;
+  const fromTime = new Date(`${dateFrom}T00:00:00`).getTime();
+  const toTime = new Date(`${dateTo}T00:00:00`).getTime();
+  return !Number.isNaN(fromTime) && !Number.isNaN(toTime) && fromTime <= toTime;
+};
 
 export default function AnalyticsDashboard() {
-  const [filters, setFilters] = useState({ preset: 'today', dateFrom: today, dateTo: today, sellerId: '', clientId: '' });
+  const [filters, setFilters] = useState(createInitialFilters);
   const [metadata, setMetadata] = useState({ sellers: [], clients: [] });
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const lastRequestKey = useRef('');
 
   const loadMetadata = async () => {
     try {
@@ -24,35 +53,79 @@ export default function AnalyticsDashboard() {
     }
   };
 
-  const loadAnalytics = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const params = { ...filters };
-      const { data: analytics } = await api.get('/analytics/dashboard', { params });
-      setData(analytics);
-    } catch (err) {
-      setError(err?.response?.data?.message || 'No se pudo cargar la analitica');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const updateFilter = useCallback((key, value) => {
+    setFilters((prev) => {
+      if (key === 'preset') {
+        return { ...prev, preset: value, ...(value === 'custom' ? {} : getPresetRange(value)) };
+      }
+
+      if (key === 'dateFrom' || key === 'dateTo') {
+        return { ...prev, preset: 'custom', [key]: value };
+      }
+
+      return { ...prev, [key]: value };
+    });
+  }, []);
 
   useEffect(() => { loadMetadata(); }, []);
-  useEffect(() => { loadAnalytics(); }, []);
+  useEffect(() => {
+    if (!isValidDateRange(filters)) {
+      lastRequestKey.current = '';
+      setLoading(false);
+      setError(filters.dateFrom && filters.dateTo ? 'La fecha desde no puede ser posterior a la fecha hasta.' : '');
+      return undefined;
+    }
+
+    const params = { ...filters };
+    const requestKey = JSON.stringify(params);
+    if (requestKey === lastRequestKey.current) return undefined;
+
+    const controller = new AbortController();
+    const timeout = window.setTimeout(async () => {
+      lastRequestKey.current = requestKey;
+      setLoading(true);
+      setError('');
+
+      try {
+        const { data: analytics } = await api.get('/analytics/dashboard', { params, signal: controller.signal });
+        setData(analytics);
+      } catch (err) {
+        if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED') return;
+        setError(err?.response?.data?.message || 'No se pudo cargar la analitica');
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, 180);
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [filters]);
 
   const kpis = data?.kpis || {};
   const changes = data?.changes || {};
   const daily = data?.charts?.dailySales || [];
+  const initialLoading = loading && !data;
+  const refreshing = loading && Boolean(data);
+  const noResults = Boolean(data) && Number(kpis.salesCount || 0) === 0;
 
-  const cards = useMemo(() => [
+  const primaryCards = useMemo(() => [
     { title: 'Ventas netas', key: 'netSales', icon: Wallet, type: 'money' },
-    { title: 'Ventas brutas', key: 'grossSales', icon: Receipt, type: 'money' },
-    { title: 'Descuentos totales', key: 'totalDiscount', icon: HandCoins, type: 'money' },
     { title: 'Cantidad de ventas', key: 'salesCount', icon: ShoppingBag, type: 'number' },
-    { title: 'Ventas pendientes', key: 'pendingAmount', icon: Clock3, type: 'money' },
-    { title: 'Total cobrado', key: 'paidAmount', icon: BarChart3, type: 'money' }
+    { title: 'Total cobrado', key: 'paidAmount', icon: BarChart3, type: 'money' },
+    { title: 'Deuda pendiente', key: 'pendingAmount', icon: Clock3, type: 'money' }
   ], []);
+  const secondaryMetrics = useMemo(() => [
+    { label: 'Ventas brutas', value: kpis.grossSales, type: 'money' },
+    { label: 'Descuentos', value: kpis.totalDiscount, type: 'money' },
+    { label: 'Ventas pendientes', value: kpis.pendingCount, type: 'number' },
+    { label: 'Perdida por devoluciones', value: data?.finance?.returnsLost, type: 'money' }
+  ], [data?.finance?.returnsLost, kpis.grossSales, kpis.pendingCount, kpis.totalDiscount]);
+  const formatMetric = (value, type = 'money') =>
+    type === 'money'
+      ? new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(Number(value || 0))
+      : new Intl.NumberFormat('es-AR').format(Number(value || 0));
 
   return (
     <main className="page analytics-page">
@@ -70,16 +143,20 @@ export default function AnalyticsDashboard() {
       <div className="card analytics-workspace">
         <FilterBar
           filters={filters}
-          onChange={(key, value) => setFilters((prev) => ({ ...prev, [key]: value }))}
+          onChange={updateFilter}
           sellers={metadata.sellers}
           clients={metadata.clients}
-          onApply={loadAnalytics}
-          loading={loading}
         />
+        {refreshing ? (
+          <p className="analytics-refresh-status" aria-live="polite">
+            <span aria-hidden="true" />
+            Actualizando...
+          </p>
+        ) : null}
 
-        {loading ? (
+        {initialLoading ? (
           <section className="analytics-loading" aria-busy="true" aria-label="Cargando analitica">
-            {cards.map((card) => (
+            {primaryCards.map((card) => (
               <article key={card.key} className="inventory-metric analytics-skeleton">
                 <span>{card.title}</span>
                 <strong>Cargando...</strong>
@@ -88,24 +165,37 @@ export default function AnalyticsDashboard() {
           </section>
         ) : null}
 
-        {!loading && data ? (
+        {data ? (
           <>
+            {noResults && !refreshing ? (
+              <p className="inventory-table__empty">No hay resultados para los filtros seleccionados.</p>
+            ) : null}
             <section className="analytics-kpis" aria-label="Metricas principales">
-              {cards.map((card) => (
+              {primaryCards.map((card) => (
                 <KpiCard key={card.key} title={card.title} value={kpis[card.key]} type={card.type} change={changes[card.key]} icon={card.icon} sparkline={daily} />
               ))}
             </section>
 
-            <FinanceStrip finance={data.finance} />
-
-            <section className="analytics-grid" aria-label="Graficos de ventas">
+            <section className="analytics-chart-grid analytics-chart-grid--primary" aria-label="Graficos principales">
               <SalesTrendChart data={data.charts?.dailySales} />
               <PaymentMethodsChart data={data.charts?.paymentMethods} />
-              <HourlySalesChart data={data.charts?.hourlySales} />
-              <ProductRanking title="Top productos vendidos" rows={data.charts?.topProducts} />
+              <ProductRanking title="Top productos vendidos" rows={data.charts?.topProducts} className="analytics-panel--priority" />
             </section>
 
-            <section className="analytics-grid" aria-label="Devoluciones">
+            <details className="analytics-secondary-metrics">
+              <summary>Metricas secundarias</summary>
+              <section className="analytics-secondary-grid" aria-label="Metricas secundarias">
+                {secondaryMetrics.map((metric) => (
+                  <article key={metric.label} className="analytics-summary-box">
+                    <span>{metric.label}</span>
+                    <strong>{formatMetric(metric.value, metric.type)}</strong>
+                  </article>
+                ))}
+              </section>
+            </details>
+
+            <section className="analytics-chart-grid analytics-chart-grid--details" aria-label="Graficos complementarios">
+              <HourlySalesChart data={data.charts?.hourlySales} />
               <article className="analytics-panel">
                 <h3>Devoluciones</h3>
                 <div className="analytics-return-grid">

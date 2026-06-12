@@ -1,5 +1,6 @@
-import { Routes, Route, Navigate, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import ResponsiveNavbar from './components/ResponsiveNavbar';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import AdminDashboard from './pages/AdminDashboard';
@@ -27,43 +28,10 @@ const HomeRedirect = () => {
   return <Navigate to="/client" replace />;
 };
 
-const Navigation = () => {
-  const { user, logout } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
-
-  if (!user || location.pathname === '/login' || location.pathname === '/register') return null;
-
-  const links = [{ to: '/', label: 'Inicio' }];
-  if (user.role === 'ADMIN') {
-    links.push({ to: '/admin', label: 'Admin' }, { to: '/analytics', label: 'Analitica' }, { to: '/inventario', label: 'Inventario' }, { to: '/ventas', label: 'Ventas' }, { to: '/clientes', label: 'Clientes' });
-  }
-  if (user.role === 'SELLER') links.push({ to: '/ventas', label: 'Ventas' }, { to: '/clientes', label: 'Clientes' });
-  if (user.role === 'CLIENT' || user.role === 'PARENT') links.push({ to: '/client', label: 'Panel' });
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login', { replace: true });
-  };
-
-  return (
-    <nav className="top-nav">
-      <div className="top-nav__links">
-        {links.map((link) => (
-          <NavLink key={link.to} to={link.to} className={({ isActive }) => (isActive ? 'active' : '')}>
-            {link.label}
-          </NavLink>
-        ))}
-      </div>
-      <button type="button" className="logout-btn" onClick={handleLogout}>Cerrar sesion</button>
-    </nav>
-  );
-};
-
 export default function App() {
   return (
     <>
-      <Navigation />
+      <ResponsiveNavbar />
       <Routes>
         <Route path="/" element={<HomeRedirect />} />
         <Route path="/login" element={<LoginPage />} />
