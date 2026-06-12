@@ -51,19 +51,56 @@ exports.saleSchema = Joi.object({
   status: Joi.string().trim().default('PAID')
 });
 
+exports.clientSchema = Joi.object({
+  name: Joi.string().trim().required(),
+  email: Joi.string().email().optional().allow('', null),
+  phone: Joi.string().trim().optional().allow('', null),
+  cardId: Joi.string().trim().optional().allow('', null),
+  isActive: Joi.boolean().optional()
+});
+
+exports.clientUpdateSchema = Joi.object({
+  name: Joi.string().trim().optional(),
+  email: Joi.string().email().optional().allow('', null),
+  phone: Joi.string().trim().optional().allow('', null),
+  cardId: Joi.string().trim().optional().allow('', null),
+  isActive: Joi.boolean().optional()
+}).min(1);
+
+exports.saleStatusSchema = Joi.object({
+  status: Joi.string().trim().uppercase().valid('PAID').required()
+});
+
 exports.reservationSchema = Joi.object({
-  client: Joi.string().hex().length(24).required(),
+  client: Joi.string().guid({ version: ['uuidv4'] }).required(),
   items: Joi.array().items(
-    Joi.object({ product: Joi.string().hex().length(24).required(), quantity: Joi.number().min(1).required(), price: Joi.number().min(0).required() })
+    Joi.object({ product: Joi.string().guid({ version: ['uuidv4'] }).required(), quantity: Joi.number().min(1).required(), price: Joi.number().min(0).required() })
   ).min(1).required(),
   paidAmount: Joi.number().min(0).default(0),
-  expiresAt: Joi.date().required()
+  expiresAt: Joi.date().required(),
+  status: Joi.string().trim().uppercase().valid('ACTIVE', 'RETIRED', 'CANCELLED').optional()
+});
+
+exports.reservationStatusSchema = Joi.object({
+  status: Joi.string().trim().uppercase().valid('ACTIVE', 'RETIRED', 'CANCELLED').required()
+});
+
+exports.clientReservationSchema = Joi.object({
+  productId: Joi.string().guid({ version: ['uuidv4'] }).required(),
+  quantity: Joi.number().integer().min(1).required()
+});
+
+exports.balanceChargeSchema = Joi.object({
+  amount: Joi.number().positive().required(),
+  paymentMethod: Joi.string().trim().required(),
+  notes: Joi.string().trim().optional().allow(''),
+  note: Joi.string().trim().optional().allow('')
 });
 
 exports.accountMovementSchema = Joi.object({
   ownerType: Joi.string().valid('CLIENT', 'SUPPLIER').required(),
-  ownerId: Joi.string().hex().length(24).required(),
-  type: Joi.string().valid('DEBT', 'PAYMENT', 'RECHARGE').required(),
+  ownerId: Joi.string().guid({ version: ['uuidv4'] }).required(),
+  type: Joi.string().valid('DEBT', 'PAYMENT', 'RECHARGE', 'CONSUMPTION', 'ADJUSTMENT').required(),
   amount: Joi.number().min(0.01).required(),
   notes: Joi.string().optional().allow('')
 });

@@ -171,7 +171,8 @@ a {
 
 .auth-card {
   position: relative;
-  width: 100%;
+  width: min(100%, 460px);
+  min-width: 0;
   max-width: 460px;
   display: flex;
   flex-direction: column;
@@ -228,8 +229,10 @@ a {
   font-weight: 700;
 }
 
-.auth-field input {
+.auth-field input,
+.auth-field select {
   width: 100%;
+  min-height: 46px;
   padding: 12px 13px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -239,15 +242,37 @@ a {
   transition: border-color 190ms ease, box-shadow 190ms ease, background 190ms ease;
 }
 
+.auth-field select {
+  appearance: none;
+  padding-right: 38px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-secondary) 50%),
+    linear-gradient(135deg, var(--text-secondary) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 12px) 50%;
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
 .auth-field input::placeholder {
   color: color-mix(in srgb, var(--text-secondary) 70%, transparent);
 }
 
-.auth-field input:focus {
+.auth-field input:focus,
+.auth-field select:focus {
   outline: none;
   border-color: var(--primary-light);
   box-shadow: 0 0 0 3px rgba(22, 52, 93, 0.16);
   background: var(--surface);
+}
+
+.auth-field input[aria-invalid='true'] {
+  border-color: color-mix(in srgb, var(--danger) 64%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 13%, transparent);
+}
+
+.auth-field-error {
+  color: color-mix(in srgb, var(--danger) 82%, #ffffff);
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
 .auth-row {
@@ -360,6 +385,23 @@ a {
   font-size: 0.9rem;
 }
 
+.auth-success {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--success) 42%, transparent);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  color: color-mix(in srgb, var(--success) 78%, #ffffff);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  font-size: 0.9rem;
+}
+
+.auth-footer {
+  margin: 0;
+  color: var(--text-secondary);
+  text-align: center;
+  font-size: 0.92rem;
+}
+
 @media (max-width: 768px) {
   .auth-shell {
     padding: 16px;
@@ -367,6 +409,17 @@ a {
 
   .auth-card {
     border-radius: 20px;
+  }
+}
+
+@media (max-height: 760px) {
+  .auth-shell {
+    place-items: start center;
+    overflow-y: auto;
+  }
+
+  .auth-shell__orb {
+    display: none;
   }
 }
 
@@ -1287,9 +1340,19 @@ a {
 
 .sales-toolbar {
   display: grid;
-  grid-template-columns: minmax(260px, max-content) minmax(180px, 240px) max-content;
+  grid-template-columns: minmax(250px, max-content) minmax(260px, max-content) minmax(160px, 210px) minmax(220px, 1fr) max-content;
   gap: 10px;
   align-items: end;
+}
+
+.sales-filter-group {
+  display: grid;
+  gap: 6px;
+}
+
+.sales-filter-group > span {
+  font-size: 0.88rem;
+  font-weight: 900;
 }
 
 .sales-segmented {
@@ -1301,6 +1364,10 @@ a {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-soft);
+}
+
+.sales-segmented--status {
+  min-width: 260px;
 }
 
 .sales-segmented button,
@@ -1331,6 +1398,10 @@ a {
   gap: 6px;
   font-size: 0.88rem;
   font-weight: 900;
+}
+
+.sales-client-filter {
+  min-width: 0;
 }
 
 .sales-date-filter input {
@@ -1372,7 +1443,7 @@ a {
 }
 
 .sales-table {
-  min-width: 900px;
+  min-width: 1040px;
 }
 
 .sales-product-line {
@@ -1399,9 +1470,40 @@ a {
 }
 
 .sales-status--pending {
-  color: #8a5200;
+  color: color-mix(in srgb, #f59e0b 84%, #ffffff);
   background: rgba(245, 158, 11, 0.14);
   border: 1px solid rgba(245, 158, 11, 0.34);
+}
+
+.sales-mark-paid {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--primary-light) 56%, var(--border));
+  border-radius: 8px;
+  color: color-mix(in srgb, var(--primary-light) 56%, #ffffff);
+  background: color-mix(in srgb, var(--primary-light) 14%, transparent);
+  font-size: 0.78rem;
+  font-weight: 900;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sales-mark-paid:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--primary-light) 24%, var(--surface));
+}
+
+.sales-mark-paid:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.sales-action-spinner {
+  animation: entity-combobox-spin 700ms linear infinite;
 }
 
 @media (max-width: 1100px) {
@@ -1435,7 +1537,9 @@ a {
     grid-template-columns: 1fr;
   }
 
-  .sales-segmented {
+  .sales-segmented,
+  .sales-segmented--status {
+    min-width: 0;
     width: 100%;
   }
 
@@ -1460,6 +1564,603 @@ a {
 
 .analytics-page {
   max-width: 1280px;
+}
+
+.clients-page {
+  max-width: 1280px;
+}
+
+.clients-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.clients-header h1 {
+  margin: 2px 0 0;
+  font-size: clamp(1.8rem, 3vw, 2.35rem);
+}
+
+.clients-header p:not(.clients-kicker) {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+}
+
+.clients-kicker {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.clients-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.clients-metric {
+  display: grid;
+  gap: 5px;
+  min-height: 82px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.clients-metric span {
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.clients-metric strong {
+  align-self: end;
+  font-size: clamp(1.12rem, 2vw, 1.45rem);
+}
+
+.clients-metric--balance {
+  border-color: color-mix(in srgb, var(--info) 34%, var(--border));
+}
+
+.clients-metric--money {
+  border-color: color-mix(in srgb, var(--success) 34%, var(--border));
+}
+
+.clients-workspace {
+  gap: 12px;
+}
+
+.clients-toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.2fr) minmax(260px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.clients-search {
+  display: grid;
+  gap: 6px;
+  font-weight: 900;
+}
+
+.clients-search > div {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.clients-search svg {
+  position: absolute;
+  left: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.clients-search input,
+.client-form input,
+.client-form select,
+.client-form textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--surface-soft);
+  font: inherit;
+}
+
+.clients-search input {
+  padding-left: 38px;
+}
+
+.clients-search input:focus,
+.client-form input:focus,
+.client-form select:focus,
+.client-form textarea:focus {
+  outline: none;
+  border-color: var(--primary-light);
+  box-shadow: 0 0 0 3px rgba(22, 52, 93, 0.16);
+  background: var(--surface);
+}
+
+.clients-tabs,
+.clients-status-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.clients-tabs button,
+.clients-status-tabs button {
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: transparent;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.clients-tabs button:hover,
+.clients-tabs button.active,
+.clients-status-tabs button:hover,
+.clients-status-tabs button.active {
+  color: var(--text-primary);
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+.clients-tab-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.clients-panel-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.clients-panel-header h2,
+.clients-panel-header p {
+  margin: 0;
+}
+
+.clients-panel-header p {
+  color: var(--text-secondary);
+}
+
+.clients-table-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  overflow-x: auto;
+}
+
+.clients-table {
+  min-width: 860px;
+}
+
+.client-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.client-status--active,
+.client-status--reservado {
+  color: color-mix(in srgb, var(--info) 78%, #ffffff);
+  background: color-mix(in srgb, var(--info) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--info) 35%, transparent);
+}
+
+.client-status--retired,
+.client-status--retirado,
+.client-status--comprado,
+.client-status--returned,
+.client-status--recharge {
+  color: color-mix(in srgb, var(--success) 72%, #ffffff);
+  background: color-mix(in srgb, var(--success) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--success) 35%, transparent);
+}
+
+.client-status--cancelled,
+.client-status--cancelado,
+.client-status--consumption {
+  color: color-mix(in srgb, var(--danger) 82%, #ffffff);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, transparent);
+}
+
+.client-status--pendiente,
+.client-status--expired,
+.client-status--debt,
+.client-status--payment,
+.client-status--adjustment {
+  color: color-mix(in srgb, #f59e0b 84%, #ffffff);
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.34);
+}
+
+.clients-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.clients-row-actions button,
+.client-drawer__header button {
+  min-height: 32px;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--surface-soft);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.clients-row-actions button:hover,
+.client-drawer__header button:hover {
+  background: var(--hover);
+}
+
+.client-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(5, 10, 20, 0.58);
+}
+
+.client-drawer {
+  width: min(100%, 460px);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-deep);
+  overflow-y: auto;
+}
+
+.client-drawer__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.client-drawer__header h2 {
+  margin: 0;
+}
+
+.client-drawer__header button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.client-form {
+  display: grid;
+  gap: 13px;
+}
+
+.client-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.client-form textarea {
+  resize: vertical;
+}
+
+.client-panel-icon {
+  flex: 0 0 auto;
+  color: var(--primary-light);
+}
+
+.client-product-filters {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(180px, 260px);
+  gap: 10px;
+  align-items: end;
+}
+
+.client-filter-field {
+  display: grid;
+  gap: 6px;
+  font-weight: 900;
+}
+
+.client-filter-field select {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--surface-soft);
+  font: inherit;
+}
+
+.client-filter-field select:focus {
+  outline: none;
+  border-color: var(--primary-light);
+  box-shadow: 0 0 0 3px rgba(22, 52, 93, 0.16);
+  background: var(--surface);
+}
+
+.client-product-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.client-product-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.client-product-card__header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.client-product-card__header div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.client-product-card__header strong,
+.client-product-card__header span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.client-product-card__header div > span {
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.client-product-card dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.client-product-card dl div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.client-product-card dt,
+.client-product-card dd {
+  min-width: 0;
+  margin: 0;
+}
+
+.client-product-card dt {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.client-product-card dd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 900;
+}
+
+.client-product-card .inventory-primary-action:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.client-secondary-action {
+  min-height: 32px;
+  padding: 7px 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 42%, var(--border));
+  border-radius: var(--radius-sm);
+  color: color-mix(in srgb, var(--danger) 82%, #ffffff);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.client-secondary-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.client-secondary-action:disabled {
+  opacity: 0.62;
+  cursor: wait;
+}
+
+.client-history-header {
+  margin-top: 6px;
+}
+
+.client-balance-card {
+  display: grid;
+  gap: 6px;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--success) 38%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--success) 9%, var(--surface));
+  box-shadow: var(--shadow-soft);
+}
+
+.client-balance-card span {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.client-balance-card strong {
+  font-size: clamp(1.7rem, 4vw, 2.4rem);
+}
+
+.client-drawer-summary,
+.client-drawer-total {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-soft);
+}
+
+.client-drawer-summary span,
+.client-drawer-total span {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.client-drawer-total strong {
+  font-size: 1.35rem;
+}
+
+.client-notifications {
+  display: grid;
+  gap: 10px;
+}
+
+.client-notification {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.client-notification.is-unread {
+  border-color: color-mix(in srgb, var(--info) 40%, var(--border));
+  background: color-mix(in srgb, var(--info) 8%, var(--surface));
+}
+
+.client-notification strong,
+.client-notification p {
+  margin: 0;
+}
+
+.client-notification p {
+  margin-top: 4px;
+  color: var(--text-secondary);
+}
+
+.client-notification span {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.clients-header .inventory-primary-action,
+.clients-panel-header .inventory-primary-action,
+.client-form .inventory-primary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+@media (max-width: 920px) {
+  .clients-toolbar,
+  .clients-panel-header {
+    grid-template-columns: 1fr;
+  }
+
+  .clients-toolbar {
+    display: grid;
+  }
+
+  .clients-panel-header,
+  .clients-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .clients-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .clients-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .clients-tabs,
+  .clients-status-tabs {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .client-product-filters,
+  .client-product-card dl {
+    grid-template-columns: 1fr;
+  }
+
+  .client-notification {
+    display: grid;
+  }
+
+  .client-notification span {
+    white-space: normal;
+  }
 }
 
 .analytics-header {

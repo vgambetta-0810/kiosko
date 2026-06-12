@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Calendar, CalendarDays, CalendarRange, RefreshCw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Calendar, CalendarDays, CalendarRange, CheckCircle, LoaderCircle, RefreshCw } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import SearchableCreatableCombobox from '../components/common/SearchableCreatableCombobox';
 import { api } from '../services/api';
 
 const modes = [
@@ -13,6 +14,7 @@ const paymentLabels = {
   CASH: 'Efectivo',
   TRANSFER: 'Transferencia',
   CARD: 'Tarjeta',
+  BALANCE: 'Saldo/Tarjeta',
   MP: 'Mercado Pago'
 };
 
@@ -20,6 +22,12 @@ const statusLabels = {
   PAID: 'Pagada',
   PENDING: 'Pendiente'
 };
+
+const statusFilters = [
+  { key: 'ALL', label: 'Todas' },
+  { key: 'PAID', label: 'Pagadas' },
+  { key: 'PENDING', label: 'Pendientes' }
+];
 
 const moneyFormatter = new Intl.NumberFormat('es-AR', {
   style: 'currency',
@@ -84,24 +92,55 @@ const summarize = (sales) =>
     { total: 0, paid: 0, pending: 0, count: 0 }
   );
 
+const getClientLabel = (client) => client?.name || '';
+const getClientValue = (client) => client?.id || '';
+const getClientDescription = (client) => {
+  const email = client?.email?.endsWith('@clientes.local') ? '' : client?.email;
+  const balance = moneyFormatter.format(Number(client?.balance || 0));
+  return [email, `Saldo ${balance}`].filter(Boolean).join(' · ') || `Saldo ${balance}`;
+};
+
 export default function SalesHistory() {
   const [mode, setMode] = useState('day');
   const [anchorDate, setAnchorDate] = useState(toInputDate(new Date()));
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [clients, setClients] = useState([]);
+  const [selectedClient, setSelectedClient] = useState(null);
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [clientsLoading, setClientsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [clientsError, setClientsError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [updatingSaleId, setUpdatingSaleId] = useState('');
 
   const range = useMemo(() => getRange(mode, anchorDate), [anchorDate, mode]);
   const summary = useMemo(() => summarize(sales), [sales]);
 
-  const loadSales = async () => {
+  const loadClients = useCallback(async (query = '') => {
+    setClientsLoading(true);
+    setClientsError('');
+    try {
+      const { data } = await api.get('/sales/clients', { params: query ? { q: query } : undefined });
+      setClients(data || []);
+    } catch (err) {
+      setClientsError(err?.response?.data?.message || 'No se pudieron cargar los clientes');
+    } finally {
+      setClientsLoading(false);
+    }
+  }, []);
+
+  const loadSales = useCallback(async () => {
     setLoading(true);
     setError('');
+    setSuccessMessage('');
     try {
       const { data } = await api.get('/sales', {
         params: {
           dateFrom: range.dateFrom,
-          dateTo: range.dateTo
+          dateTo: range.dateTo,
+          ...(statusFilter !== 'ALL' ? { status: statusFilter } : {}),
+          ...(selectedClient ? { clientId: selectedClient.id } : {})
         }
       });
       setSales(data);
@@ -110,11 +149,36 @@ export default function SalesHistory() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [range.dateFrom, range.dateTo, selectedClient, statusFilter]);
 
   useEffect(() => {
     loadSales();
-  }, [range.dateFrom, range.dateTo]);
+  }, [loadSales]);
+
+  useEffect(() => {
+    loadClients();
+  }, [loadClients]);
+
+  const markSalePaid = async (sale) => {
+    if (updatingSaleId) return;
+    if (!window.confirm('¿Confirmar que esta venta fue pagada?')) return;
+
+    setUpdatingSaleId(sale.id);
+    setError('');
+    setSuccessMessage('');
+    try {
+      const { data } = await api.patch(`/sales/${sale.id}/status`, { status: 'paid' });
+      setSales((current) => {
+        const updated = current.map((item) => (item.id === data.id ? data : item));
+        return statusFilter === 'PENDING' ? updated.filter((item) => item.id !== data.id) : updated;
+      });
+      setSuccessMessage('Venta marcada como pagada');
+    } catch (err) {
+      setError(err?.response?.data?.message || 'No se pudo marcar la venta como pagada');
+    } finally {
+      setUpdatingSaleId('');
+    }
+  };
 
   const rangeLabel =
     mode === 'day'
@@ -137,6 +201,7 @@ export default function SalesHistory() {
       </header>
 
       {error ? <p className="inventory-error">{error}</p> : null}
+      {successMessage ? <p className="inventory-success">{successMessage}</p> : null}
 
       <section className="sales-metrics" aria-label="Resumen de ventas">
         <article className="sales-metric">
@@ -159,19 +224,57 @@ export default function SalesHistory() {
 
       <div className="card sales-workspace">
         <section className="sales-toolbar" aria-label="Filtros de ventas">
-          <div className="sales-segmented" role="group" aria-label="Periodo">
-            {modes.map(({ key, label, icon: Icon }) => (
-              <button key={key} type="button" className={mode === key ? 'active' : ''} onClick={() => setMode(key)}>
-                <Icon size={16} aria-hidden="true" />
-                <span>{label}</span>
-              </button>
-            ))}
+          <div className="sales-filter-group">
+            <span>Periodo</span>
+            <div className="sales-segmented" role="group" aria-label="Periodo">
+              {modes.map(({ key, label, icon: Icon }) => (
+                <button key={key} type="button" className={mode === key ? 'active' : ''} onClick={() => setMode(key)}>
+                  <Icon size={16} aria-hidden="true" />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="sales-filter-group">
+            <span>Estado</span>
+            <div className="sales-segmented sales-segmented--status" role="group" aria-label="Estado">
+              {statusFilters.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  className={statusFilter === option.key ? 'active' : ''}
+                  onClick={() => setStatusFilter(option.key)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           </div>
 
           <label className="sales-date-filter">
             <span>Fecha</span>
             <input type="date" value={anchorDate} onChange={(event) => setAnchorDate(event.target.value)} />
           </label>
+
+          <div className="sales-client-filter">
+            <SearchableCreatableCombobox
+              id="sales-history-client"
+              label="Cliente"
+              selectedOption={selectedClient}
+              options={clients}
+              placeholder="Buscar cliente"
+              loading={clientsLoading}
+              error={clientsError}
+              allowCreate={false}
+              getOptionLabel={getClientLabel}
+              getOptionValue={getClientValue}
+              getOptionDescription={getClientDescription}
+              onSearch={loadClients}
+              onSelect={setSelectedClient}
+              onClear={() => setSelectedClient(null)}
+            />
+          </div>
 
           <button type="button" className="sales-refresh" onClick={loadSales} disabled={loading} title="Actualizar ventas">
             <RefreshCw size={16} aria-hidden="true" />
@@ -190,6 +293,7 @@ export default function SalesHistory() {
                   <th>Pago</th>
                   <th>Estado</th>
                   <th>Total</th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -213,18 +317,35 @@ export default function SalesHistory() {
                     <td>
                       <strong>{moneyFormatter.format(Number(sale.finalTotal || 0))}</strong>
                     </td>
+                    <td>
+                      {sale.status === 'PENDING' ? (
+                        <button
+                          type="button"
+                          className="sales-mark-paid"
+                          onClick={() => markSalePaid(sale)}
+                          disabled={Boolean(updatingSaleId)}
+                        >
+                          {updatingSaleId === sale.id ? (
+                            <LoaderCircle size={15} className="sales-action-spinner" aria-hidden="true" />
+                          ) : (
+                            <CheckCircle size={15} aria-hidden="true" />
+                          )}
+                          <span>{updatingSaleId === sale.id ? 'Marcando...' : 'Marcar pagada'}</span>
+                        </button>
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
                 {!loading && sales.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="inventory-table__empty">
-                      No hay ventas registradas para este periodo.
+                    <td colSpan={7} className="inventory-table__empty">
+                      No hay ventas para los filtros seleccionados
                     </td>
                   </tr>
                 ) : null}
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="inventory-table__empty">
+                    <td colSpan={7} className="inventory-table__empty">
                       Cargando ventas...
                     </td>
                   </tr>

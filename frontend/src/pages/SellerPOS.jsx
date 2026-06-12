@@ -319,8 +319,9 @@ export default function SellerPOS() {
       setStep('items');
       setMessage('Venta registrada correctamente');
 
-      const productsRes = await api.get('/products');
+      const [productsRes, clientsRes] = await Promise.all([api.get('/products'), api.get('/sales/clients')]);
       setProducts(productsRes.data.filter((product) => product.isActive));
+      setClients(clientsRes.data);
       focusBarcode();
     } catch (error) {
       setMessage(error?.response?.data?.message || 'No se pudo registrar la venta');

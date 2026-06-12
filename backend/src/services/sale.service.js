@@ -5,6 +5,10 @@ const ApiError = require('../utils/ApiError');
 const { KINDS, ensureDefaultSaleOptions, findSaleOptionByCode } = require('../utils/saleOptions');
 
 const activeSaleWhere = { deletedAt: null };
+const payableStatuses = new Set(['PAID', 'PENDING']);
+const balancePaymentCodes = new Set(['BALANCE', 'SALDO', 'TARJETA', 'SALDO_TARJETA']);
+
+const normalizeStatus = (status) => String(status || '').trim().toUpperCase();
 
 const consolidateItems = (items) => {
   const byProduct = new Map();
@@ -41,15 +45,19 @@ exports.createSale = async ({ sellerId, createdBy, clientId = null, items, disco
   await ensureDefaultSaleOptions();
   return withTransaction(async (session) => {
     const effectiveSellerId = sellerId || createdBy;
+    const saleStatus = normalizeStatus(status || 'PAID');
     if (!effectiveSellerId) throw new ApiError(400, 'Seller is required');
 
     const [paymentOption, saleTypeOption] = await Promise.all([
       findSaleOptionByCode(KINDS.PAYMENT_METHOD, paymentMethod),
-      findSaleOptionByCode(KINDS.SALE_TYPE, status)
+      findSaleOptionByCode(KINDS.SALE_TYPE, saleStatus)
     ]);
     if (!paymentOption) throw new ApiError(400, 'Metodo de pago invalido');
     if (!saleTypeOption) throw new ApiError(400, 'Tipo de venta invalido');
     if (saleTypeOption.requiresClient && !clientId) throw new ApiError(400, 'El cliente es obligatorio para este tipo de venta');
+    const usesBalance = balancePaymentCodes.has(paymentOption.code);
+    if (usesBalance && !clientId) throw new ApiError(400, 'Selecciona un cliente para pagar con saldo');
+    if (usesBalance && saleStatus !== 'PAID') throw new ApiError(400, 'El pago con saldo debe registrarse como venta pagada');
 
     let total = 0;
     const preparedItems = [];
@@ -74,7 +82,17 @@ exports.createSale = async ({ sellerId, createdBy, clientId = null, items, disco
 
     const finalTotal = total - discount;
     const sale = await Sale.create(
-      { sellerId: effectiveSellerId, clientId: clientId || null, items: preparedItems, total, discount, finalTotal, paymentMethod, status },
+      {
+        sellerId: effectiveSellerId,
+        clientId: clientId || null,
+        items: preparedItems,
+        total,
+        discount,
+        finalTotal,
+        paymentMethod,
+        status: saleStatus,
+        paidAt: saleStatus === 'PAID' ? new Date() : null
+      },
       { transaction: session }
     );
 
@@ -103,15 +121,33 @@ exports.createSale = async ({ sellerId, createdBy, clientId = null, items, disco
       });
     }
 
+    if (usesBalance && finalTotal > 0) {
+      await addMovement({
+        ownerType: 'CLIENT',
+        ownerId: clientId,
+        type: 'CONSUMPTION',
+        amount: finalTotal,
+        createdBy: effectiveSellerId,
+        session,
+        requireAvailableBalance: true,
+        notes: `CONSUMPTION SALE ${sale.id}`
+      });
+    }
+
     return sale;
   });
 };
 
-exports.listSales = async ({ dateFrom, dateTo, sellerId, clientId }) => {
+exports.listSales = async ({ dateFrom, dateTo, sellerId, clientId, status }) => {
   const where = { ...activeSaleWhere };
+  const saleStatus = normalizeStatus(status);
 
   if (sellerId) where.sellerId = sellerId;
   if (clientId) where.clientId = clientId;
+  if (saleStatus) {
+    if (!payableStatuses.has(saleStatus)) throw new ApiError(400, 'Estado de venta invalido');
+    where.status = saleStatus;
+  }
   if (dateFrom || dateTo) {
     where.createdAt = {};
     if (dateFrom) where.createdAt[Op.gte] = new Date(dateFrom);
@@ -147,4 +183,34 @@ exports.softDeleteSale = async ({ id, userId }) => {
   if (!sale) throw new ApiError(404, 'Sale not found');
   await sale.update({ deletedAt: new Date() });
   return sale;
+};
+
+exports.updateSaleStatus = async ({ id, status, userId }) => {
+  const nextStatus = normalizeStatus(status);
+  if (nextStatus !== 'PAID') throw new ApiError(400, 'Solo se puede marcar una venta como pagada');
+
+  const saleId = await withTransaction(async (session) => {
+    const sale = await Sale.findOne({ where: { id, ...activeSaleWhere }, transaction: session });
+    if (!sale) throw new ApiError(404, 'Sale not found');
+    if (sale.status !== 'PENDING') throw new ApiError(400, 'Solo se pueden cobrar ventas pendientes');
+
+    const paidAt = new Date();
+    await sale.update({ status: 'PAID', paidAt }, { transaction: session });
+
+    if (sale.clientId) {
+      await addMovement({
+        ownerType: 'CLIENT',
+        ownerId: sale.clientId,
+        type: 'PAYMENT',
+        amount: sale.finalTotal,
+        createdBy: userId || sale.sellerId,
+        session,
+        notes: `PAYMENT SALE ${sale.id}`
+      });
+    }
+
+    return sale.id;
+  });
+
+  return exports.getSaleById(saleId);
 };

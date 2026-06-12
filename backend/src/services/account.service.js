@@ -1,4 +1,5 @@
 const { Account, AccountMovement } = require('../models/Account');
+const ApiError = require('../utils/ApiError');
 
 exports.getOrCreateAccount = async (ownerType, ownerId, session) => {
   let account = await Account.findOne({ where: { ownerType, ownerId }, transaction: session });
@@ -8,14 +9,24 @@ exports.getOrCreateAccount = async (ownerType, ownerId, session) => {
   return account;
 };
 
-exports.addMovement = async ({ ownerType, ownerId, type, amount, status = 'CONFIRMED', notes, createdBy, session }) => {
+const movementDelta = (type, amount) => {
+  if (type === 'PAYMENT' || type === 'CONSUMPTION') return -amount;
+  return amount;
+};
+
+exports.addMovement = async ({ ownerType, ownerId, type, amount, status = 'CONFIRMED', notes, createdBy, session, requireAvailableBalance = false }) => {
   const account = await exports.getOrCreateAccount(ownerType, ownerId, session);
-  const sign = type === 'DEBT' ? 1 : -1;
-  account.balance += sign * amount;
+  const numericAmount = Number(amount);
+  if (!Number.isFinite(numericAmount) || numericAmount <= 0) throw new ApiError(400, 'El monto debe ser mayor a cero');
+
+  const delta = movementDelta(type, numericAmount);
+  if (requireAvailableBalance && account.balance + delta < 0) throw new ApiError(400, 'Saldo insuficiente para completar la operacion');
+
+  account.balance += delta;
   await account.save({ transaction: session });
 
   const movement = await AccountMovement.create(
-    { accountId: account.id, type, amount, status, notes, createdById: createdBy },
+    { accountId: account.id, type, amount: numericAmount, balanceAfter: account.balance, status, notes, createdById: createdBy },
     { transaction: session }
   );
 

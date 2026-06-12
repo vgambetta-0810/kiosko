@@ -42,6 +42,14 @@ const ensureSchema = async () => {
     });
   }
 
+  const salesTable = await queryInterface.describeTable('Sales');
+  if (!salesTable.paidAt) {
+    await queryInterface.addColumn('Sales', 'paidAt', {
+      type: Sequelize.DATE,
+      allowNull: true
+    });
+  }
+
   const productIndexes = await queryInterface.showIndex('Products');
   if (!productIndexes.some((index) => index.name === 'products_codigo_barras')) {
     try {
@@ -58,6 +66,29 @@ const ensureSchema = async () => {
       if (!/unique constraint/i.test(err.message)) throw err;
       console.warn('No se pudo crear el indice unico de codigo de barras porque existen duplicados previos');
     }
+  }
+
+  const usersTable = await queryInterface.describeTable('Users');
+  if (!usersTable.phone) {
+    await queryInterface.addColumn('Users', 'phone', {
+      type: Sequelize.STRING,
+      allowNull: true
+    });
+  }
+
+  if (!usersTable.cardId) {
+    await queryInterface.addColumn('Users', 'cardId', {
+      type: Sequelize.STRING,
+      allowNull: true
+    });
+  }
+
+  const accountMovementsTable = await queryInterface.describeTable('AccountMovements');
+  if (!accountMovementsTable.balanceAfter) {
+    await queryInterface.addColumn('AccountMovements', 'balanceAfter', {
+      type: Sequelize.FLOAT,
+      allowNull: true
+    });
   }
 };
 

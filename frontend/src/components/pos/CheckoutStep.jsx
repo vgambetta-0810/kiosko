@@ -4,8 +4,19 @@ import SearchableCreatableCombobox from '../common/SearchableCreatableCombobox';
 const getOptionLabel = (option) => option?.name || '';
 const getOptionCode = (option) => option?.code || '';
 const getClientId = (client) => client?.id || '';
-const getClientDescription = (client) => (client?.email?.endsWith('@clientes.local') ? 'Cliente' : client?.email || 'Cliente');
 const getSaleTypeDescription = (option) => (option?.requiresClient ? 'Requiere cliente' : 'No requiere cliente');
+const balancePaymentCodes = new Set(['BALANCE', 'SALDO', 'TARJETA', 'SALDO_TARJETA']);
+const moneyFormatter = new Intl.NumberFormat('es-AR', {
+  style: 'currency',
+  currency: 'ARS',
+  maximumFractionDigits: 2
+});
+
+const getClientDescription = (client) => {
+  const email = client?.email?.endsWith('@clientes.local') ? '' : client?.email;
+  const balance = moneyFormatter.format(Number(client?.balance || 0));
+  return [email, `Saldo ${balance}`].filter(Boolean).join(' · ') || `Saldo ${balance}`;
+};
 
 function CheckoutStep({
   cart,
@@ -45,7 +56,8 @@ function CheckoutStep({
   );
   const selectedSaleType = useMemo(() => saleTypes.find((option) => option.code === status) || null, [saleTypes, status]);
   const selectedClient = useMemo(() => clients.find((client) => client.id === clientId) || null, [clientId, clients]);
-  const clientRequired = Boolean(selectedSaleType?.requiresClient);
+  const usesBalance = Boolean(selectedPaymentMethod && balancePaymentCodes.has(selectedPaymentMethod.code));
+  const clientRequired = Boolean(selectedSaleType?.requiresClient || usesBalance);
 
   useEffect(() => {
     const focusId = window.setTimeout(() => {
@@ -73,7 +85,9 @@ function CheckoutStep({
     const nextErrors = {};
     if (!selectedPaymentMethod) nextErrors.paymentMethod = 'Seleccioná un método de pago';
     if (!selectedSaleType) nextErrors.saleType = 'Seleccioná un tipo de venta';
-    if (clientRequired && !selectedClient) nextErrors.client = 'El cliente es obligatorio para ventas fiadas';
+    if (usesBalance && status !== 'PAID') nextErrors.saleType = 'El pago con saldo debe ser de contado';
+    if (clientRequired && !selectedClient) nextErrors.client = usesBalance ? 'Seleccioná un cliente para pagar con saldo' : 'El cliente es obligatorio para ventas fiadas';
+    if (usesBalance && selectedClient && Number(selectedClient.balance || 0) < finalTotal) nextErrors.client = 'Saldo insuficiente para esta venta';
     setValidationErrors(nextErrors);
 
     if (nextErrors.paymentMethod) return focus(paymentMethodRef);

@@ -1,8 +1,6 @@
 const asyncHandler = require('../utils/asyncHandler');
 const saleService = require('../services/sale.service');
-const User = require('../models/User');
-const { createHash } = require('crypto');
-const { Op } = require('../models');
+const clientService = require('../services/client.service');
 const { KINDS, createSaleOption, listSaleOptions, normalizeOptionName } = require('../utils/saleOptions');
 
 const optionKinds = {
@@ -21,7 +19,8 @@ exports.list = asyncHandler(async (req, res) => {
     dateFrom: req.query.dateFrom,
     dateTo: req.query.dateTo,
     sellerId,
-    clientId: req.query.clientId
+    clientId: req.query.clientId,
+    status: req.query.status
   });
   res.json(sales);
 });
@@ -36,42 +35,20 @@ exports.remove = asyncHandler(async (req, res) => {
   res.json(sale);
 });
 
+exports.updateStatus = asyncHandler(async (req, res) => {
+  const sale = await saleService.updateSaleStatus({ id: req.params.id, status: req.body.status, userId: req.user._id });
+  res.json(sale);
+});
+
 exports.clients = asyncHandler(async (req, res) => {
-  const q = normalizeOptionName(req.query.q);
-  const clients = await User.findAll({
-    where: {
-      role: 'CLIENT',
-      isActive: true,
-      ...(q ? { name: { [Op.like]: `%${q}%` } } : {})
-    },
-    attributes: ['id', 'name', 'email'],
-    order: [['name', 'ASC']]
-  });
-  res.json(clients);
+  res.json(await clientService.listClients({ q: req.query.q }));
 });
 
 exports.createClient = asyncHandler(async (req, res) => {
-  const name = normalizeOptionName(req.body?.name);
-  if (!name) return res.status(400).json({ message: 'El nombre del cliente es obligatorio' });
-
-  const clients = await User.findAll({ where: { role: 'CLIENT' }, attributes: ['id', 'name', 'email', 'isActive'] });
-  const existing = clients.find((client) => normalizeOptionName(client.name).toLocaleLowerCase('es') === name.toLocaleLowerCase('es'));
-  if (existing) {
-    if (!existing.isActive) await existing.update({ isActive: true, name });
-    return res.json({ id: existing.id, name: existing.name, email: existing.email });
-  }
-
-  const normalizedKey = name.toLocaleLowerCase('es');
-  const internalEmail = `cliente-${createHash('sha256').update(normalizedKey).digest('hex').slice(0, 24)}@clientes.local`;
-  let client;
-  try {
-    client = await User.create({ name, email: internalEmail, role: 'CLIENT' });
-  } catch (error) {
-    if (error.name !== 'SequelizeUniqueConstraintError') throw error;
-    client = await User.findOne({ where: { email: internalEmail, role: 'CLIENT' } });
-    if (!client.isActive) await client.update({ isActive: true, name });
-  }
-  res.status(201).json({ id: client.id, name: client.name, email: client.email });
+  const client = await clientService.createClient({ name: req.body?.name });
+  const status = client.__created ? 201 : 200;
+  delete client.__created;
+  res.status(status).json(client);
 });
 
 exports.options = asyncHandler(async (req, res) => {

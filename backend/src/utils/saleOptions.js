@@ -11,6 +11,7 @@ const DEFAULT_OPTIONS = [
   { kind: KINDS.PAYMENT_METHOD, code: 'CASH', name: 'Efectivo' },
   { kind: KINDS.PAYMENT_METHOD, code: 'TRANSFER', name: 'Transferencia' },
   { kind: KINDS.PAYMENT_METHOD, code: 'CARD', name: 'Tarjeta' },
+  { kind: KINDS.PAYMENT_METHOD, code: 'BALANCE', name: 'Saldo/Tarjeta' },
   { kind: KINDS.PAYMENT_METHOD, code: 'MP', name: 'Mercado Pago' },
   { kind: KINDS.SALE_TYPE, code: 'PAID', name: 'Contado', requiresClient: false },
   { kind: KINDS.SALE_TYPE, code: 'PENDING', name: 'Fiado', requiresClient: true }

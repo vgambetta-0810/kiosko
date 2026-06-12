@@ -2,7 +2,9 @@ const express = require('express');
 
 const router = express.Router();
 router.use('/auth', require('./auth.routes'));
+router.use('/client', require('./clientDashboard.routes'));
 router.use('/users', require('./user.routes'));
+router.use('/clients', require('./client.routes'));
 router.use('/products', require('./product.routes'));
 router.use('/categories', require('./category.routes'));
 router.use('/suppliers', require('./supplier.routes'));

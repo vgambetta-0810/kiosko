@@ -6,6 +6,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import StockDashboard from './pages/StockDashboard';
 import SellerPOS from './pages/SellerPOS';
 import ClientPanel from './pages/ClientPanel';
+import ClientsPage from './pages/ClientsPage';
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
 import SalesHistory from './pages/SalesHistory';
 
@@ -35,9 +36,9 @@ const Navigation = () => {
 
   const links = [{ to: '/', label: 'Inicio' }];
   if (user.role === 'ADMIN') {
-    links.push({ to: '/admin', label: 'Admin' }, { to: '/analytics', label: 'Analitica' }, { to: '/inventario', label: 'Inventario' }, { to: '/ventas', label: 'Ventas' });
+    links.push({ to: '/admin', label: 'Admin' }, { to: '/analytics', label: 'Analitica' }, { to: '/inventario', label: 'Inventario' }, { to: '/ventas', label: 'Ventas' }, { to: '/clientes', label: 'Clientes' });
   }
-  if (user.role === 'SELLER') links.push({ to: '/ventas', label: 'Ventas' });
+  if (user.role === 'SELLER') links.push({ to: '/ventas', label: 'Ventas' }, { to: '/clientes', label: 'Clientes' });
   if (user.role === 'CLIENT' || user.role === 'PARENT') links.push({ to: '/client', label: 'Panel' });
 
   const handleLogout = () => {
@@ -74,6 +75,7 @@ export default function App() {
         <Route path="/pos" element={<Navigate to="/ventas" replace />} />
         <Route path="/ventas" element={<Guard roles={["ADMIN", "SELLER"]}><SellerPOS /></Guard>} />
         <Route path="/ventas/historial" element={<Guard roles={["ADMIN", "SELLER"]}><SalesHistory /></Guard>} />
+        <Route path="/clientes" element={<Guard roles={["ADMIN", "SELLER"]}><ClientsPage /></Guard>} />
         <Route path="/client" element={<Guard roles={["CLIENT", "PARENT"]}><ClientPanel /></Guard>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

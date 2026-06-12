@@ -1,0 +1,684 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CreditCard, LoaderCircle, Plus, RefreshCw, Search, Users } from 'lucide-react';
+import SearchableCreatableCombobox from '../components/common/SearchableCreatableCombobox';
+import { api } from '../services/api';
+
+const tabs = [
+  { key: 'reservations', label: 'Reservas' },
+  { key: 'products', label: 'Productos' },
+  { key: 'balance', label: 'Saldo / Tarjeta' }
+];
+
+const reservationStatuses = [
+  { key: 'ALL', label: 'Todas' },
+  { key: 'ACTIVE', label: 'Activas' },
+  { key: 'RETIRED', label: 'Retiradas' },
+  { key: 'CANCELLED', label: 'Canceladas' }
+];
+
+const statusLabels = {
+  ACTIVE: 'Activa',
+  RETIRED: 'Retirada',
+  CANCELLED: 'Cancelada',
+  EXPIRED: 'Vencida',
+  RETURNED: 'Devuelta',
+  COMPRADO: 'Comprado',
+  RESERVADO: 'Reservado',
+  RETIRADO: 'Retirado',
+  CANCELADO: 'Cancelado',
+  PENDIENTE: 'Pendiente',
+  RECHARGE: 'Carga',
+  CONSUMPTION: 'Consumo',
+  PAYMENT: 'Pago',
+  DEBT: 'Deuda',
+  ADJUSTMENT: 'Ajuste'
+};
+
+const moneyFormatter = new Intl.NumberFormat('es-AR', {
+  style: 'currency',
+  currency: 'ARS',
+  maximumFractionDigits: 2
+});
+
+const dateFormatter = new Intl.DateTimeFormat('es-AR', {
+  dateStyle: 'short',
+  timeStyle: 'short'
+});
+
+const todayInput = () => new Date().toISOString().slice(0, 10);
+const getClientLabel = (client) => client?.name || '';
+const getClientValue = (client) => client?.id || '';
+const getClientDescription = (client) => {
+  const parts = [];
+  if (client?.phone) parts.push(client.phone);
+  if (client?.cardId) parts.push(`Tarjeta ${client.cardId}`);
+  parts.push(moneyFormatter.format(Number(client?.balance || 0)));
+  return parts.join(' · ');
+};
+const getProductLabel = (product) => product?.name || '';
+const getProductValue = (product) => product?.id || '';
+const getProductDescription = (product) => `${moneyFormatter.format(Number(product?.price || 0))} · Stock ${product?.stock ?? 0}`;
+
+const emptyClientForm = { name: '', email: '', phone: '', cardId: '' };
+const emptyReservationForm = { client: null, product: null, quantity: 1, expiresAt: todayInput(), status: 'ACTIVE' };
+const emptyBalanceForm = { client: null, amount: '', paymentMethod: 'Efectivo', notes: '' };
+
+function Drawer({ title, children, onClose }) {
+  return (
+    <div className="client-drawer-backdrop" role="presentation" onMouseDown={onClose}>
+      <aside className="client-drawer" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
+        <header className="client-drawer__header">
+          <h2>{title}</h2>
+          <button type="button" onClick={onClose} aria-label="Cerrar">
+            X
+          </button>
+        </header>
+        {children}
+      </aside>
+    </div>
+  );
+}
+
+export default function ClientsPage() {
+  const [activeTab, setActiveTab] = useState('reservations');
+  const [clients, setClients] = useState([]);
+  const [summary, setSummary] = useState({ totalClients: 0, clientsWithBalance: 0, activeReservations: 0, totalBalance: 0 });
+  const [products, setProducts] = useState([]);
+  const [reservations, setReservations] = useState([]);
+  const [productRecords, setProductRecords] = useState([]);
+  const [balanceData, setBalanceData] = useState(null);
+  const [clientQuery, setClientQuery] = useState('');
+  const [selectedClient, setSelectedClient] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [reservationStatus, setReservationStatus] = useState('ALL');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [drawer, setDrawer] = useState(null);
+  const [clientForm, setClientForm] = useState(emptyClientForm);
+  const [reservationForm, setReservationForm] = useState(emptyReservationForm);
+  const [balanceForm, setBalanceForm] = useState(emptyBalanceForm);
+  const [saving, setSaving] = useState(false);
+
+  const selectedClientId = selectedClient?.id || '';
+  const selectedProductId = selectedProduct?.id || '';
+
+  const filteredClients = useMemo(() => {
+    const query = clientQuery.trim().toLocaleLowerCase('es');
+    if (!query) return clients;
+    return clients.filter((client) =>
+      [client.name, client.email, client.phone, client.cardId].filter(Boolean).some((value) => String(value).toLocaleLowerCase('es').includes(query))
+    );
+  }, [clientQuery, clients]);
+
+  const loadClients = useCallback(async (query = '') => {
+    const { data } = await api.get('/clients', { params: query ? { q: query } : undefined });
+    setClients(data.clients || []);
+    setSummary(data.summary || {});
+    return data.clients || [];
+  }, []);
+
+  const loadProducts = useCallback(async () => {
+    const { data } = await api.get('/products');
+    setProducts((data || []).filter((product) => product.isActive));
+  }, []);
+
+  const loadReservations = useCallback(async () => {
+    const { data } = await api.get('/reservations', {
+      params: {
+        ...(selectedClientId ? { clientId: selectedClientId } : {}),
+        ...(reservationStatus !== 'ALL' ? { status: reservationStatus } : {})
+      }
+    });
+    setReservations(data || []);
+  }, [reservationStatus, selectedClientId]);
+
+  const loadProductRecords = useCallback(async () => {
+    const { data } = await api.get('/clients/products', {
+      params: {
+        ...(selectedClientId ? { clientId: selectedClientId } : {}),
+        ...(selectedProductId ? { productId: selectedProductId } : {})
+      }
+    });
+    setProductRecords(data || []);
+  }, [selectedClientId, selectedProductId]);
+
+  const loadBalance = useCallback(async () => {
+    if (!selectedClientId) {
+      setBalanceData(null);
+      return;
+    }
+    const { data } = await api.get(`/clients/${selectedClientId}/balance-movements`);
+    setBalanceData(data);
+  }, [selectedClientId]);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      await Promise.all([
+        loadClients(),
+        loadProducts(),
+        activeTab === 'reservations' ? loadReservations() : Promise.resolve(),
+        activeTab === 'products' ? loadProductRecords() : Promise.resolve(),
+        activeTab === 'balance' ? loadBalance() : Promise.resolve()
+      ]);
+    } catch (err) {
+      setError(err?.response?.data?.message || 'No se pudo cargar clientes');
+    } finally {
+      setLoading(false);
+    }
+  }, [activeTab, loadBalance, loadClients, loadProductRecords, loadProducts, loadReservations]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const reloadCurrentTab = async () => {
+    const loadedClients = await loadClients();
+    if (selectedClientId) {
+      const nextClient = loadedClients.find((client) => client.id === selectedClientId);
+      if (nextClient) setSelectedClient(nextClient);
+    }
+    if (activeTab === 'reservations') await loadReservations();
+    if (activeTab === 'products') await loadProductRecords();
+    if (activeTab === 'balance') await loadBalance();
+  };
+
+  const createClient = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const { data } = await api.post('/clients', clientForm);
+      setSelectedClient(data);
+      setClientForm(emptyClientForm);
+      setDrawer(null);
+      setMessage('Cliente creado correctamente');
+      await reloadCurrentTab();
+    } catch (err) {
+      setError(err?.response?.data?.message || 'No se pudo crear el cliente');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const createReservation = async (event) => {
+    event.preventDefault();
+    if (!reservationForm.client || !reservationForm.product) {
+      setError('Seleccioná cliente y producto para crear la reserva');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const { data } = await api.post('/reservations', {
+        client: reservationForm.client.id,
+        items: [
+          {
+            product: reservationForm.product.id,
+            quantity: Number(reservationForm.quantity),
+            price: Number(reservationForm.product.price || 0)
+          }
+        ],
+        expiresAt: reservationForm.expiresAt
+      });
+      if (reservationForm.status !== 'ACTIVE') {
+        await api.patch(`/reservations/${data.id}/status`, { status: reservationForm.status });
+      }
+      setReservationForm(emptyReservationForm);
+      setDrawer(null);
+      setMessage('Reserva creada correctamente');
+      await Promise.all([loadProducts(), loadReservations(), loadClients()]);
+    } catch (err) {
+      setError(err?.response?.data?.message || 'No se pudo crear la reserva');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const chargeBalance = async (event) => {
+    event.preventDefault();
+    if (!balanceForm.client) {
+      setError('Seleccioná un cliente para cargar saldo');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      await api.post(`/clients/${balanceForm.client.id}/balance-charge`, {
+        amount: Number(balanceForm.amount),
+        paymentMethod: balanceForm.paymentMethod,
+        notes: balanceForm.notes
+      });
+      setSelectedClient(balanceForm.client);
+      setBalanceForm(emptyBalanceForm);
+      setDrawer(null);
+      setMessage('Saldo cargado correctamente');
+      await reloadCurrentTab();
+    } catch (err) {
+      setError(err?.response?.data?.message || 'No se pudo cargar saldo');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const changeReservationStatus = async (reservation, status) => {
+    setError('');
+    setMessage('');
+    try {
+      await api.patch(`/reservations/${reservation.id}/status`, { status });
+      setMessage('Reserva actualizada');
+      await Promise.all([loadProducts(), loadReservations(), loadProductRecords()]);
+    } catch (err) {
+      setError(err?.response?.data?.message || 'No se pudo actualizar la reserva');
+    }
+  };
+
+  return (
+    <div className="page clients-page">
+      <header className="clients-header">
+        <div>
+          <p className="clients-kicker">Administración</p>
+          <h1>Clientes</h1>
+          <p>Gestión de clientes, reservas, productos y saldo</p>
+        </div>
+        <button type="button" className="inventory-primary-action" onClick={() => setDrawer('client')}>
+          <Plus size={17} aria-hidden="true" />
+          <span>Nuevo cliente</span>
+        </button>
+      </header>
+
+      {error ? <p className="inventory-error">{error}</p> : null}
+      {message ? <p className="inventory-success">{message}</p> : null}
+
+      <section className="clients-metrics" aria-label="Resumen de clientes">
+        <article className="clients-metric">
+          <span>Total clientes</span>
+          <strong>{summary.totalClients || 0}</strong>
+        </article>
+        <article className="clients-metric clients-metric--balance">
+          <span>Clientes con saldo</span>
+          <strong>{summary.clientsWithBalance || 0}</strong>
+        </article>
+        <article className="clients-metric">
+          <span>Reservas activas</span>
+          <strong>{summary.activeReservations || 0}</strong>
+        </article>
+        <article className="clients-metric clients-metric--money">
+          <span>Saldo total cargado</span>
+          <strong>{moneyFormatter.format(Number(summary.totalBalance || 0))}</strong>
+        </article>
+      </section>
+
+      <div className="card clients-workspace">
+        <section className="clients-toolbar" aria-label="Filtros de clientes">
+          <label className="clients-search">
+            <span>Buscar cliente</span>
+            <div>
+              <Search size={17} aria-hidden="true" />
+              <input value={clientQuery} onChange={(event) => setClientQuery(event.target.value)} placeholder="Nombre, teléfono, email o tarjeta" />
+            </div>
+          </label>
+
+          <SearchableCreatableCombobox
+            id="clients-filter-client"
+            label="Cliente seleccionado"
+            selectedOption={selectedClient}
+            options={filteredClients}
+            placeholder="Filtrar por cliente"
+            allowCreate={false}
+            getOptionLabel={getClientLabel}
+            getOptionValue={getClientValue}
+            getOptionDescription={getClientDescription}
+            onSearch={loadClients}
+            onSelect={setSelectedClient}
+            onClear={() => setSelectedClient(null)}
+          />
+
+          <button type="button" className="sales-refresh" onClick={refresh} disabled={loading}>
+            {loading ? <LoaderCircle size={16} className="sales-action-spinner" aria-hidden="true" /> : <RefreshCw size={16} aria-hidden="true" />}
+            <span>Actualizar</span>
+          </button>
+        </section>
+
+        <nav className="clients-tabs" aria-label="Secciones de clientes">
+          {tabs.map((tab) => (
+            <button key={tab.key} type="button" className={activeTab === tab.key ? 'active' : ''} onClick={() => setActiveTab(tab.key)}>
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
+        {activeTab === 'reservations' ? (
+          <section className="clients-tab-panel">
+            <div className="clients-panel-header">
+              <div>
+                <h2>Reservas</h2>
+                <p>Reservas asociadas a alumnos y clientes.</p>
+              </div>
+              <button
+                type="button"
+                className="inventory-primary-action"
+                onClick={() => {
+                  setReservationForm((current) => ({ ...current, client: selectedClient || current.client }));
+                  setDrawer('reservation');
+                }}
+              >
+                <Plus size={17} aria-hidden="true" />
+                <span>Nueva reserva</span>
+              </button>
+            </div>
+
+            <div className="clients-status-tabs" role="group" aria-label="Estado de reservas">
+              {reservationStatuses.map((option) => (
+                <button key={option.key} type="button" className={reservationStatus === option.key ? 'active' : ''} onClick={() => setReservationStatus(option.key)}>
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="clients-table-card">
+              <table className="inventory-table clients-table">
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th>Producto</th>
+                    <th>Cantidad</th>
+                    <th>Fecha</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reservations.map((reservation) => (
+                    <tr key={reservation.id}>
+                      <td>{reservation.client?.name || 'Sin cliente'}</td>
+                      <td>{(reservation.items || []).map((item) => item.product?.name || 'Producto').join(', ')}</td>
+                      <td>{(reservation.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0)}</td>
+                      <td>{reservation.expiresAt ? dateFormatter.format(new Date(reservation.expiresAt)) : '-'}</td>
+                      <td>
+                        <span className={`client-status client-status--${String(reservation.status || '').toLowerCase()}`}>
+                          {statusLabels[reservation.status] || reservation.status}
+                        </span>
+                      </td>
+                      <td>
+                        {reservation.status === 'ACTIVE' ? (
+                          <div className="clients-row-actions">
+                            <button type="button" onClick={() => changeReservationStatus(reservation, 'RETIRED')}>
+                              Retirada
+                            </button>
+                            <button type="button" onClick={() => changeReservationStatus(reservation, 'CANCELLED')}>
+                              Cancelar
+                            </button>
+                          </div>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                  {!loading && reservations.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="inventory-table__empty">
+                        No hay reservas para los filtros seleccionados
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === 'products' ? (
+          <section className="clients-tab-panel">
+            <div className="clients-panel-header">
+              <div>
+                <h2>Productos</h2>
+                <p>Historial de compras y reservas por cliente.</p>
+              </div>
+              <SearchableCreatableCombobox
+                id="clients-product-filter"
+                label="Producto"
+                selectedOption={selectedProduct}
+                options={products}
+                placeholder="Filtrar producto"
+                allowCreate={false}
+                getOptionLabel={getProductLabel}
+                getOptionValue={getProductValue}
+                getOptionDescription={getProductDescription}
+                onSelect={setSelectedProduct}
+                onClear={() => setSelectedProduct(null)}
+              />
+            </div>
+
+            <div className="clients-table-card">
+              <table className="inventory-table clients-table">
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th>Producto</th>
+                    <th>Cantidad</th>
+                    <th>Precio</th>
+                    <th>Fecha</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {productRecords.map((record) => (
+                    <tr key={record.id}>
+                      <td>{record.client?.name || 'Sin cliente'}</td>
+                      <td>{record.product?.name || 'Producto'}</td>
+                      <td>{record.quantity}</td>
+                      <td>{moneyFormatter.format(Number(record.price || 0))}</td>
+                      <td>{record.date ? dateFormatter.format(new Date(record.date)) : '-'}</td>
+                      <td>
+                        <span className={`client-status client-status--${String(record.status || '').toLowerCase()}`}>
+                          {statusLabels[record.status] || record.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {!loading && productRecords.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="inventory-table__empty">
+                        No hay productos asociados al filtro seleccionado
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === 'balance' ? (
+          <section className="clients-tab-panel">
+            <div className="clients-panel-header">
+              <div>
+                <h2>Saldo / Tarjeta</h2>
+                <p>{selectedClient ? `Saldo actual: ${moneyFormatter.format(Number(balanceData?.account?.balance || selectedClient.balance || 0))}` : 'Seleccioná un cliente para ver movimientos.'}</p>
+              </div>
+              <button
+                type="button"
+                className="inventory-primary-action"
+                onClick={() => {
+                  setBalanceForm((current) => ({ ...current, client: selectedClient || current.client }));
+                  setDrawer('balance');
+                }}
+              >
+                <CreditCard size={17} aria-hidden="true" />
+                <span>Cargar saldo</span>
+              </button>
+            </div>
+
+            <div className="clients-table-card">
+              <table className="inventory-table clients-table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Monto</th>
+                    <th>Saldo resultante</th>
+                    <th>Observación</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(balanceData?.movements || []).map((movement) => (
+                    <tr key={movement.id}>
+                      <td>{movement.createdAt ? dateFormatter.format(new Date(movement.createdAt)) : '-'}</td>
+                      <td>
+                        <span className={`client-status client-status--${String(movement.type || '').toLowerCase()}`}>
+                          {statusLabels[movement.type] || movement.type}
+                        </span>
+                      </td>
+                      <td>{moneyFormatter.format(Number(movement.amount || 0))}</td>
+                      <td>{movement.balanceAfter === null || movement.balanceAfter === undefined ? '-' : moneyFormatter.format(Number(movement.balanceAfter || 0))}</td>
+                      <td>{movement.notes || '-'}</td>
+                    </tr>
+                  ))}
+                  {selectedClient && !loading && !balanceData?.movements?.length ? (
+                    <tr>
+                      <td colSpan={5} className="inventory-table__empty">
+                        Este cliente todavía no tiene movimientos de saldo
+                      </td>
+                    </tr>
+                  ) : null}
+                  {!selectedClient ? (
+                    <tr>
+                      <td colSpan={5} className="inventory-table__empty">
+                        Seleccioná un cliente para ver saldo y movimientos
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
+      </div>
+
+      {drawer === 'client' ? (
+        <Drawer title="Nuevo cliente" onClose={() => setDrawer(null)}>
+          <form className="client-form" onSubmit={createClient}>
+            <label>
+              Nombre completo
+              <input required value={clientForm.name} onChange={(event) => setClientForm((current) => ({ ...current, name: event.target.value }))} />
+            </label>
+            <label>
+              Email opcional
+              <input type="email" value={clientForm.email} onChange={(event) => setClientForm((current) => ({ ...current, email: event.target.value }))} />
+            </label>
+            <label>
+              Teléfono opcional
+              <input value={clientForm.phone} onChange={(event) => setClientForm((current) => ({ ...current, phone: event.target.value }))} />
+            </label>
+            <label>
+              Identificador / tarjeta
+              <input value={clientForm.cardId} onChange={(event) => setClientForm((current) => ({ ...current, cardId: event.target.value }))} />
+            </label>
+            <button type="submit" className="inventory-primary-action" disabled={saving}>
+              {saving ? 'Guardando...' : 'Crear cliente'}
+            </button>
+          </form>
+        </Drawer>
+      ) : null}
+
+      {drawer === 'reservation' ? (
+        <Drawer title="Nueva reserva" onClose={() => setDrawer(null)}>
+          <form className="client-form" onSubmit={createReservation}>
+            <SearchableCreatableCombobox
+              id="reservation-client"
+              label="Cliente"
+              selectedOption={reservationForm.client}
+              options={clients}
+              placeholder="Seleccionar cliente"
+              allowCreate={false}
+              getOptionLabel={getClientLabel}
+              getOptionValue={getClientValue}
+              getOptionDescription={getClientDescription}
+              onSelect={(client) => setReservationForm((current) => ({ ...current, client }))}
+              onClear={() => setReservationForm((current) => ({ ...current, client: null }))}
+            />
+            <SearchableCreatableCombobox
+              id="reservation-product"
+              label="Producto"
+              selectedOption={reservationForm.product}
+              options={products}
+              placeholder="Seleccionar producto"
+              allowCreate={false}
+              getOptionLabel={getProductLabel}
+              getOptionValue={getProductValue}
+              getOptionDescription={getProductDescription}
+              onSelect={(product) => setReservationForm((current) => ({ ...current, product }))}
+              onClear={() => setReservationForm((current) => ({ ...current, product: null }))}
+            />
+            <label>
+              Cantidad
+              <input min="1" type="number" value={reservationForm.quantity} onChange={(event) => setReservationForm((current) => ({ ...current, quantity: event.target.value }))} />
+            </label>
+            <label>
+              Fecha
+              <input type="date" value={reservationForm.expiresAt} onChange={(event) => setReservationForm((current) => ({ ...current, expiresAt: event.target.value }))} />
+            </label>
+            <label>
+              Estado
+              <select value={reservationForm.status} onChange={(event) => setReservationForm((current) => ({ ...current, status: event.target.value }))}>
+                <option value="ACTIVE">Activa</option>
+                <option value="RETIRED">Retirada</option>
+                <option value="CANCELLED">Cancelada</option>
+              </select>
+            </label>
+            <button type="submit" className="inventory-primary-action" disabled={saving}>
+              {saving ? 'Guardando...' : 'Crear reserva'}
+            </button>
+          </form>
+        </Drawer>
+      ) : null}
+
+      {drawer === 'balance' ? (
+        <Drawer title="Cargar saldo" onClose={() => setDrawer(null)}>
+          <form className="client-form" onSubmit={chargeBalance}>
+            <SearchableCreatableCombobox
+              id="balance-client"
+              label="Cliente"
+              selectedOption={balanceForm.client || selectedClient}
+              options={clients}
+              placeholder="Seleccionar cliente"
+              allowCreate={false}
+              getOptionLabel={getClientLabel}
+              getOptionValue={getClientValue}
+              getOptionDescription={getClientDescription}
+              onSelect={(client) => setBalanceForm((current) => ({ ...current, client }))}
+              onClear={() => setBalanceForm((current) => ({ ...current, client: null }))}
+            />
+            <label>
+              Monto
+              <input min="0.01" step="0.01" type="number" value={balanceForm.amount} onChange={(event) => setBalanceForm((current) => ({ ...current, amount: event.target.value }))} />
+            </label>
+            <label>
+              Medio de carga
+              <select value={balanceForm.paymentMethod} onChange={(event) => setBalanceForm((current) => ({ ...current, paymentMethod: event.target.value }))}>
+                <option>Efectivo</option>
+                <option>Transferencia</option>
+                <option>Mercado Pago</option>
+                <option>Tarjeta</option>
+              </select>
+            </label>
+            <label>
+              Observación
+              <textarea rows={3} value={balanceForm.notes} onChange={(event) => setBalanceForm((current) => ({ ...current, notes: event.target.value }))} />
+            </label>
+            <button type="submit" className="inventory-primary-action" disabled={saving}>
+              {saving ? 'Cargando...' : 'Registrar carga'}
+            </button>
+          </form>
+        </Drawer>
+      ) : null}
+    </div>
+  );
+}

@@ -5,6 +5,8 @@ const User = sequelize.define('User', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   name: { type: DataTypes.STRING, allowNull: false },
   email: { type: DataTypes.STRING, allowNull: false, unique: true },
+  phone: { type: DataTypes.STRING },
+  cardId: { type: DataTypes.STRING },
   password: { type: DataTypes.STRING },
   googleId: { type: DataTypes.STRING },
   role: { type: DataTypes.STRING, allowNull: false, defaultValue: 'CLIENT' },
@@ -68,6 +70,7 @@ const Sale = sequelize.define('Sale', {
   finalTotal: { type: DataTypes.FLOAT, allowNull: false },
   paymentMethod: { type: DataTypes.STRING, allowNull: false },
   status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'PAID' },
+  paidAt: { type: DataTypes.DATE, allowNull: true },
   deletedAt: { type: DataTypes.DATE, allowNull: true }
 });
 
@@ -121,6 +124,7 @@ const AccountMovement = sequelize.define('AccountMovement', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   type: { type: DataTypes.STRING, allowNull: false },
   amount: { type: DataTypes.FLOAT, allowNull: false },
+  balanceAfter: { type: DataTypes.FLOAT, allowNull: true },
   status: { type: DataTypes.STRING, defaultValue: 'CONFIRMED' },
   notes: { type: DataTypes.STRING }
 });
