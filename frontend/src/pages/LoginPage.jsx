@@ -21,7 +21,7 @@ export default function LoginPage() {
   }, []);
 
   const routeByRole = (role) => {
-    if (role === 'ADMIN') return '/admin';
+    if (role === 'ADMIN') return '/';
     if (role === 'SELLER') return '/ventas';
     return '/client';
   };

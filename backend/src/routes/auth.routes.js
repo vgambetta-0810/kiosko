@@ -9,9 +9,10 @@ const router = express.Router();
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: Number(process.env.LOGIN_RATE_LIMIT_MAX || 10),
+  skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { message: 'Too many login attempts. Please try again later.' }
+  message: { message: 'Demasiados intentos de inicio de sesion. Intenta nuevamente en unos minutos.' }
 });
 
 router.post('/register', optionalAuth, validate(registerSchema), authController.register);

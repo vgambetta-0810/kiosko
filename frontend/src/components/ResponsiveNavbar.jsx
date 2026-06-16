@@ -8,8 +8,6 @@ const buildNavLinks = (role) => {
 
   if (role === 'ADMIN') {
     links.push(
-      { to: '/admin', label: 'Admin' },
-      { to: '/analytics', label: 'Analitica' },
       { to: '/inventario', label: 'Inventario' },
       { to: '/ventas', label: 'Ventas' },
       { to: '/clientes', label: 'Clientes' }

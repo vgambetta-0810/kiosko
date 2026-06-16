@@ -23,7 +23,7 @@ export default function RegisterPage() {
   const canChooseRole = user?.role === 'ADMIN';
 
   const routeByRole = (userRole) => {
-    if (userRole === 'ADMIN') return '/admin';
+    if (userRole === 'ADMIN') return '/';
     if (userRole === 'SELLER') return '/ventas';
     return '/client';
   };

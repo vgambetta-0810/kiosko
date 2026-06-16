@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { api, setToken } from '../services/api';
+import { api, clearAuthStorage, setToken } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -7,34 +7,34 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const login = async (email, password) => {
-    const { data } = await api.post('/auth/login', { email, password });
+  const persistSession = (data) => {
+    clearAuthStorage();
     localStorage.setItem('token', data.token);
     setToken(data.token);
     setUser(data.user);
     return data.user;
+  };
+
+  const login = async (email, password) => {
+    const { data } = await api.post('/auth/login', { email, password });
+    return persistSession(data);
   };
 
   const register = async (payload) => {
     const { data } = await api.post('/auth/register', payload);
-    localStorage.setItem('token', data.token);
-    setToken(data.token);
-    setUser(data.user);
-    return data.user;
+    return persistSession(data);
   };
 
   const loginWithGoogle = async (idToken) => {
     const { data } = await api.post('/auth/google', { idToken });
-    localStorage.setItem('token', data.token);
-    setToken(data.token);
-    setUser(data.user);
-    return data.user;
+    return persistSession(data);
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    clearAuthStorage();
     setToken(null);
     setUser(null);
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -49,8 +49,9 @@ export function AuthProvider({ children }) {
         const { data } = await api.get('/auth/me');
         setUser(data);
       } catch (_err) {
-        localStorage.removeItem('token');
+        clearAuthStorage();
         setToken(null);
+        setUser(null);
       } finally {
         setLoading(false);
       }

@@ -132,7 +132,7 @@ export default function AnalyticsDashboard() {
       <header className="inventory-header analytics-header">
         <div>
           <p className="inventory-kicker">Gestion comercial</p>
-          <h1>Analitica</h1>
+          <h1>Inicio</h1>
           <p className="analytics-header__summary">Ventas, cobranzas, deuda, descuentos y devoluciones del kiosko.</p>
         </div>
         <span className="inventory-header__status">{loading ? 'Actualizando...' : 'Datos sincronizados'}</span>

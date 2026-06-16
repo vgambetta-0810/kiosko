@@ -70,7 +70,7 @@ export default function StockDashboard() {
       {error ? <p className="inventory-error">{error}</p> : null}
       {message ? <p className="inventory-success">{message}</p> : null}
 
-      <InventoryMetrics metrics={metrics} />
+      <InventoryMetrics metrics={metrics} className="inventory-metrics--desktop" />
 
       <div className="card inventory-workspace">
         <InventoryToolbar
@@ -79,6 +79,7 @@ export default function StockDashboard() {
           onFilterChange={inventoryFilters.updateFilter}
           onNewProduct={openCreateDrawer}
         />
+        <InventoryMetrics metrics={metrics} compact className="inventory-metrics--mobile" />
         <InventoryTable
           products={inventoryFilters.paginatedProducts}
           sort={inventoryFilters.sort}

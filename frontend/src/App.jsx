@@ -3,7 +3,6 @@ import { useAuth } from './context/AuthContext';
 import ResponsiveNavbar from './components/ResponsiveNavbar';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
-import AdminDashboard from './pages/AdminDashboard';
 import StockDashboard from './pages/StockDashboard';
 import SellerPOS from './pages/SellerPOS';
 import ClientPanel from './pages/ClientPanel';
@@ -23,7 +22,7 @@ const HomeRedirect = () => {
   const { user, loading } = useAuth();
   if (loading) return <div className="page">Loading session...</div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role === 'ADMIN') return <Navigate to="/admin" replace />;
+  if (user.role === 'ADMIN') return <AnalyticsDashboard />;
   if (user.role === 'SELLER') return <Navigate to="/ventas" replace />;
   return <Navigate to="/client" replace />;
 };
@@ -36,8 +35,8 @@ export default function App() {
         <Route path="/" element={<HomeRedirect />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/admin" element={<Guard roles={["ADMIN"]}><AdminDashboard /></Guard>} />
-        <Route path="/analytics" element={<Guard roles={["ADMIN"]}><AnalyticsDashboard /></Guard>} />
+        <Route path="/admin" element={<Navigate to="/" replace />} />
+        <Route path="/analytics" element={<Navigate to="/" replace />} />
         <Route path="/inventario" element={<Guard roles={["ADMIN"]}><StockDashboard /></Guard>} />
         <Route path="/stock" element={<Navigate to="/inventario" replace />} />
         <Route path="/pos" element={<Navigate to="/ventas" replace />} />
