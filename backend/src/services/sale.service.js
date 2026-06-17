@@ -10,6 +10,41 @@ const balancePaymentCodes = new Set(['BALANCE', 'SALDO', 'TARJETA', 'SALDO_TARJE
 
 const normalizeStatus = (status) => String(status || '').trim().toUpperCase();
 
+const isDateOnly = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
+
+const parseLocalDateOnly = (value, boundary) => {
+  const [year, month, day] = String(value).split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setHours(boundary === 'end' ? 23 : 0, boundary === 'end' ? 59 : 0, boundary === 'end' ? 59 : 0, boundary === 'end' ? 999 : 0);
+  return date;
+};
+
+const parseSaleDateBoundary = (value, boundary) => {
+  if (!value) return null;
+  if (isDateOnly(value)) return parseLocalDateOnly(value, boundary);
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new ApiError(400, 'Rango de fechas invalido');
+  return date;
+};
+
+const expandToLocalDayBoundary = (value, boundary) => {
+  const date = parseSaleDateBoundary(value, 'start');
+  date.setHours(boundary === 'end' ? 23 : 0, boundary === 'end' ? 59 : 0, boundary === 'end' ? 59 : 0, boundary === 'end' ? 999 : 0);
+  return date;
+};
+
+const normalizeSalesDateRange = (dateFrom, dateTo) => {
+  if (!dateFrom && !dateTo) return null;
+
+  const sameDate = dateFrom && dateTo && String(dateFrom) === String(dateTo);
+  const from = sameDate ? expandToLocalDayBoundary(dateFrom, 'start') : parseSaleDateBoundary(dateFrom, 'start');
+  const to = sameDate ? expandToLocalDayBoundary(dateTo, 'end') : parseSaleDateBoundary(dateTo, 'end');
+
+  if (from && to && from > to) throw new ApiError(400, 'Desde no puede ser mayor que Hasta');
+  return { from, to };
+};
+
 const consolidateItems = (items) => {
   const byProduct = new Map();
   for (const rawItem of items || []) {
@@ -141,6 +176,7 @@ exports.createSale = async ({ sellerId, createdBy, clientId = null, items, disco
 exports.listSales = async ({ dateFrom, dateTo, sellerId, clientId, status }) => {
   const where = { ...activeSaleWhere };
   const saleStatus = normalizeStatus(status);
+  const dateRange = normalizeSalesDateRange(dateFrom, dateTo);
 
   if (sellerId) where.sellerId = sellerId;
   if (clientId) where.clientId = clientId;
@@ -148,10 +184,10 @@ exports.listSales = async ({ dateFrom, dateTo, sellerId, clientId, status }) => 
     if (!payableStatuses.has(saleStatus)) throw new ApiError(400, 'Estado de venta invalido');
     where.status = saleStatus;
   }
-  if (dateFrom || dateTo) {
+  if (dateRange) {
     where.createdAt = {};
-    if (dateFrom) where.createdAt[Op.gte] = new Date(dateFrom);
-    if (dateTo) where.createdAt[Op.lte] = new Date(dateTo);
+    if (dateRange.from) where.createdAt[Op.gte] = dateRange.from;
+    if (dateRange.to) where.createdAt[Op.lte] = dateRange.to;
   }
 
   const sales = await Sale.findAll({

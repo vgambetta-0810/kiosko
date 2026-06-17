@@ -3,6 +3,8 @@ import { BarChart3, Wallet, ShoppingBag, Clock3 } from 'lucide-react';
 import { api } from '../services/api';
 import FilterBar from '../components/analytics/FilterBar';
 import KpiCard from '../components/analytics/KpiCard';
+import DashboardSummary from '../components/analytics/DashboardSummary';
+import DashboardSecondaryMetrics from '../components/analytics/DashboardSecondaryMetrics';
 import { SalesTrendChart, PaymentMethodsChart, HourlySalesChart } from '../components/analytics/Charts';
 import { ProductRanking } from '../components/analytics/FinancePanels';
 
@@ -28,6 +30,12 @@ const getPresetRange = (preset) => {
 };
 
 const createInitialFilters = () => ({ preset: 'today', ...getPresetRange('today'), sellerId: '', clientId: '' });
+const presetSummaryLabels = {
+  today: 'Hoy',
+  week: 'Semana actual',
+  month: 'Ultimos 30 dias',
+  custom: 'Periodo'
+};
 
 const isValidDateRange = ({ dateFrom, dateTo }) => {
   if (!dateFrom || !dateTo) return false;
@@ -104,13 +112,12 @@ export default function AnalyticsDashboard() {
   }, [filters]);
 
   const kpis = data?.kpis || {};
-  const changes = data?.changes || {};
-  const daily = data?.charts?.dailySales || [];
   const initialLoading = loading && !data;
   const refreshing = loading && Boolean(data);
   const noResults = Boolean(data) && Number(kpis.salesCount || 0) === 0;
+  const periodLabel = presetSummaryLabels[filters.preset] || 'Periodo';
 
-  const primaryCards = useMemo(() => [
+  const metricCards = useMemo(() => [
     { title: 'Ventas netas', key: 'netSales', icon: Wallet, type: 'money' },
     { title: 'Cantidad de ventas', key: 'salesCount', icon: ShoppingBag, type: 'number' },
     { title: 'Total cobrado', key: 'paidAmount', icon: BarChart3, type: 'money' },
@@ -122,10 +129,6 @@ export default function AnalyticsDashboard() {
     { label: 'Ventas pendientes', value: kpis.pendingCount, type: 'number' },
     { label: 'Perdida por devoluciones', value: data?.finance?.returnsLost, type: 'money' }
   ], [data?.finance?.returnsLost, kpis.grossSales, kpis.pendingCount, kpis.totalDiscount]);
-  const formatMetric = (value, type = 'money') =>
-    type === 'money'
-      ? new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 }).format(Number(value || 0))
-      : new Intl.NumberFormat('es-AR').format(Number(value || 0));
 
   return (
     <main className="page analytics-page">
@@ -133,20 +136,21 @@ export default function AnalyticsDashboard() {
         <div>
           <p className="inventory-kicker">Gestion comercial</p>
           <h1>Inicio</h1>
-          <p className="analytics-header__summary">Ventas, cobranzas, deuda, descuentos y devoluciones del kiosko.</p>
         </div>
-        <span className="inventory-header__status">{loading ? 'Actualizando...' : 'Datos sincronizados'}</span>
+        <div className="analytics-header__tools">
+          <FilterBar
+            filters={filters}
+            onChange={updateFilter}
+            sellers={metadata.sellers}
+            clients={metadata.clients}
+          />
+          <span className="inventory-header__status">{loading ? 'Actualizando...' : 'Datos sincronizados'}</span>
+        </div>
       </header>
 
       {error ? <p className="inventory-error" role="alert">{error}</p> : null}
 
-      <div className="card analytics-workspace">
-        <FilterBar
-          filters={filters}
-          onChange={updateFilter}
-          sellers={metadata.sellers}
-          clients={metadata.clients}
-        />
+      <div className="analytics-workspace">
         {refreshing ? (
           <p className="analytics-refresh-status" aria-live="polite">
             <span aria-hidden="true" />
@@ -156,7 +160,7 @@ export default function AnalyticsDashboard() {
 
         {initialLoading ? (
           <section className="analytics-loading" aria-busy="true" aria-label="Cargando analitica">
-            {primaryCards.map((card) => (
+            {metricCards.map((card) => (
               <article key={card.key} className="inventory-metric analytics-skeleton">
                 <span>{card.title}</span>
                 <strong>Cargando...</strong>
@@ -170,33 +174,27 @@ export default function AnalyticsDashboard() {
             {noResults && !refreshing ? (
               <p className="inventory-table__empty">No hay resultados para los filtros seleccionados.</p>
             ) : null}
-            <section className="analytics-kpis" aria-label="Metricas principales">
-              {primaryCards.map((card) => (
-                <KpiCard key={card.key} title={card.title} value={kpis[card.key]} type={card.type} change={changes[card.key]} icon={card.icon} sparkline={daily} />
-              ))}
-            </section>
+
+            <DashboardSummary periodLabel={periodLabel} kpis={kpis} />
 
             <section className="analytics-chart-grid analytics-chart-grid--primary" aria-label="Graficos principales">
               <SalesTrendChart data={data.charts?.dailySales} />
               <PaymentMethodsChart data={data.charts?.paymentMethods} />
+            </section>
+
+            <section className="analytics-chart-grid analytics-chart-grid--ranking" aria-label="Productos principales">
               <ProductRanking title="Top productos vendidos" rows={data.charts?.topProducts} className="analytics-panel--priority" />
             </section>
 
-            <details className="analytics-secondary-metrics">
-              <summary>Metricas secundarias</summary>
-              <section className="analytics-secondary-grid" aria-label="Metricas secundarias">
-                {secondaryMetrics.map((metric) => (
-                  <article key={metric.label} className="analytics-summary-box">
-                    <span>{metric.label}</span>
-                    <strong>{formatMetric(metric.value, metric.type)}</strong>
-                  </article>
-                ))}
-              </section>
-            </details>
+            <DashboardSecondaryMetrics metrics={secondaryMetrics}>
+              {metricCards.map((card) => (
+                <KpiCard key={card.key} title={card.title} value={kpis[card.key]} type={card.type} icon={card.icon} />
+              ))}
+            </DashboardSecondaryMetrics>
 
             <section className="analytics-chart-grid analytics-chart-grid--details" aria-label="Graficos complementarios">
               <HourlySalesChart data={data.charts?.hourlySales} />
-              <article className="analytics-panel">
+              <section className="analytics-panel analytics-panel--returns">
                 <h3>Devoluciones</h3>
                 <div className="analytics-return-grid">
                   <div className="analytics-summary-box analytics-summary-box--danger">
@@ -208,7 +206,7 @@ export default function AnalyticsDashboard() {
                     <strong>${Number(data.charts?.returns?.amount || 0).toLocaleString('es-AR')}</strong>
                   </div>
                 </div>
-              </article>
+              </section>
 
               <ProductRanking title="Productos mas devueltos" rows={data.charts?.returns?.topReturnedProducts} showAmount />
             </section>

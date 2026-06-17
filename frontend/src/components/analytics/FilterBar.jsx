@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { ChevronDown, SlidersHorizontal } from 'lucide-react';
 
 const presetLabels = {
@@ -11,35 +11,22 @@ const presetLabels = {
 export default function FilterBar({ filters, onChange, sellers = [], clients = [] }) {
   const panelId = useId();
   const [isFiltersOpen, setIsFiltersOpen] = useState(false);
-  const [isMobileFilters, setIsMobileFilters] = useState(false);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 768px)');
-    const syncViewport = () => setIsMobileFilters(mediaQuery.matches);
-
-    syncViewport();
-    mediaQuery.addEventListener('change', syncViewport);
-
-    return () => mediaQuery.removeEventListener('change', syncViewport);
-  }, []);
 
   const activeFilters = useMemo(() => {
     const selectedSeller = sellers.find((seller) => String(seller.id) === String(filters.sellerId));
     const selectedClient = clients.find((client) => String(client.id) === String(filters.clientId));
     const periodLabel = presetLabels[filters.preset] || 'Personalizado';
-    const labels = [`Periodo: ${periodLabel}`];
+    const labels = [periodLabel];
 
     if (filters.preset === 'custom' && filters.dateFrom && filters.dateTo) {
       labels.push(`${filters.dateFrom} a ${filters.dateTo}`);
     }
 
-    if (selectedSeller) labels.push(`Vendedor: ${selectedSeller.name}`);
-    if (selectedClient) labels.push(`Cliente: ${selectedClient.name}`);
+    labels.push(`Cliente: ${selectedClient?.name || 'Todos'}`);
+    labels.push(`Vendedor: ${selectedSeller?.name || 'Todos'}`);
 
     return labels;
   }, [clients, filters.clientId, filters.dateFrom, filters.dateTo, filters.preset, filters.sellerId, sellers]);
-
-  const isPanelCollapsed = isMobileFilters && !isFiltersOpen;
 
   return (
     <section className="analytics-filter-shell" aria-label="Filtros de analitica">
@@ -47,17 +34,16 @@ export default function FilterBar({ filters, onChange, sellers = [], clients = [
         <button
           type="button"
           className="analytics-filter-toggle"
-          aria-expanded={!isPanelCollapsed}
+          aria-expanded={isFiltersOpen}
           aria-controls={panelId}
           onClick={() => setIsFiltersOpen((current) => !current)}
         >
           <SlidersHorizontal size={18} aria-hidden="true" />
-          {isFiltersOpen ? 'Ocultar filtros' : 'Mostrar filtros'}
+          Filtros
           <ChevronDown size={18} aria-hidden="true" />
         </button>
 
         <div className="analytics-filter-chips" aria-label="Filtros activos">
-          <span>Filtros activos:</span>
           {activeFilters.map((filterLabel) => (
             <strong key={filterLabel}>{filterLabel}</strong>
           ))}
@@ -66,9 +52,9 @@ export default function FilterBar({ filters, onChange, sellers = [], clients = [
 
       <div
         id={panelId}
-        className={`analytics-filter-panel${isPanelCollapsed ? ' is-collapsed' : ''}`}
-        aria-hidden={isPanelCollapsed}
-        inert={isPanelCollapsed ? '' : undefined}
+        className={`analytics-filter-panel${isFiltersOpen ? '' : ' is-collapsed'}`}
+        aria-hidden={!isFiltersOpen}
+        inert={isFiltersOpen ? undefined : ''}
       >
         <div className="analytics-filter-panel__inner">
           <div className="analytics-filterbar">

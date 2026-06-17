@@ -6,7 +6,7 @@ process.env.LOW_STOCK_THRESHOLD = '1';
 
 const connectDB = require('../src/config/db');
 const { sequelize } = require('../src/config/db');
-const { User, Product, StockMovement, Account, AccountMovement } = require('../src/models');
+const { User, Product, Sale, StockMovement, Account, AccountMovement } = require('../src/models');
 const { createSale, listSales, updateSaleStatus } = require('../src/services/sale.service');
 const { addMovement } = require('../src/services/account.service');
 
@@ -131,6 +131,94 @@ test('filtra ventas por estado y cliente', async () => {
   const paidSales = await listSales({ status: 'PAID' });
   assert.equal(paidSales.length, 1);
   assert.equal(paidSales[0].status, 'PAID');
+});
+
+test('filtra ventas de un dia completo cuando desde y hasta son iguales', async () => {
+  const { seller, product } = await baseData();
+
+  const firstSale = await createSale({
+    createdBy: seller.id,
+    paymentMethod: 'CASH',
+    status: 'PAID',
+    discount: 0,
+    items: [{ productId: product.id, quantity: 1 }]
+  });
+  const lastSale = await createSale({
+    createdBy: seller.id,
+    paymentMethod: 'CASH',
+    status: 'PAID',
+    discount: 0,
+    items: [{ productId: product.id, quantity: 1 }]
+  });
+  const nextDaySale = await createSale({
+    createdBy: seller.id,
+    paymentMethod: 'CASH',
+    status: 'PAID',
+    discount: 0,
+    items: [{ productId: product.id, quantity: 1 }]
+  });
+
+  await Sale.update({ createdAt: new Date(2026, 0, 15, 0, 0, 0, 0) }, { where: { id: firstSale.id } });
+  await Sale.update({ createdAt: new Date(2026, 0, 15, 23, 59, 59, 999) }, { where: { id: lastSale.id } });
+  await Sale.update({ createdAt: new Date(2026, 0, 16, 0, 0, 0, 0) }, { where: { id: nextDaySale.id } });
+
+  const sales = await listSales({ dateFrom: '2026-01-15', dateTo: '2026-01-15' });
+  const ids = sales.map((sale) => sale.id).sort();
+
+  assert.deepEqual(ids, [firstSale.id, lastSale.id].sort());
+});
+
+test('filtra ventas por rango inclusivo y conserva filtros de estado y cliente', async () => {
+  const { seller, client, product } = await baseData();
+  const otherClient = await User.create({ name: 'Other Client', email: `range-other-${Date.now()}@x.com`, role: 'CLIENT' });
+
+  const firstDaySale = await createSale({
+    createdBy: seller.id,
+    clientId: client.id,
+    paymentMethod: 'CASH',
+    status: 'PENDING',
+    discount: 0,
+    items: [{ productId: product.id, quantity: 1 }]
+  });
+  const lastDaySale = await createSale({
+    createdBy: seller.id,
+    clientId: client.id,
+    paymentMethod: 'CASH',
+    status: 'PENDING',
+    discount: 0,
+    items: [{ productId: product.id, quantity: 1 }]
+  });
+  const otherClientSale = await createSale({
+    createdBy: seller.id,
+    clientId: otherClient.id,
+    paymentMethod: 'CASH',
+    status: 'PENDING',
+    discount: 0,
+    items: [{ productId: product.id, quantity: 1 }]
+  });
+  const paidSale = await createSale({
+    createdBy: seller.id,
+    clientId: client.id,
+    paymentMethod: 'CASH',
+    status: 'PAID',
+    discount: 0,
+    items: [{ productId: product.id, quantity: 1 }]
+  });
+
+  await Sale.update({ createdAt: new Date(2026, 2, 10, 0, 0, 0, 0) }, { where: { id: firstDaySale.id } });
+  await Sale.update({ createdAt: new Date(2026, 2, 12, 23, 59, 59, 999) }, { where: { id: lastDaySale.id } });
+  await Sale.update({ createdAt: new Date(2026, 2, 11, 12, 0, 0, 0) }, { where: { id: otherClientSale.id } });
+  await Sale.update({ createdAt: new Date(2026, 2, 11, 12, 0, 0, 0) }, { where: { id: paidSale.id } });
+
+  const sales = await listSales({
+    dateFrom: '2026-03-10',
+    dateTo: '2026-03-12',
+    status: 'PENDING',
+    clientId: client.id
+  });
+  const ids = sales.map((sale) => sale.id).sort();
+
+  assert.deepEqual(ids, [firstDaySale.id, lastDaySale.id].sort());
 });
 
 test('marca una venta pendiente como pagada y registra el cobro', async () => {

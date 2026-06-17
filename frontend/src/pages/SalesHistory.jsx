@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Calendar, CalendarDays, CalendarRange, CheckCircle, LoaderCircle, RefreshCw } from 'lucide-react';
+import { Calendar, CalendarDays, CalendarRange, CheckCircle, LoaderCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import SearchableCreatableCombobox from '../components/common/SearchableCreatableCombobox';
 import { api } from '../services/api';
 
 const modes = [
-  { key: 'day', label: 'Dia', icon: Calendar },
+  { key: 'day', label: 'Día', icon: Calendar },
   { key: 'week', label: 'Semana', icon: CalendarDays },
   { key: 'month', label: 'Mes', icon: CalendarRange }
 ];
@@ -58,7 +58,13 @@ const endOfDay = (date) => {
   return result;
 };
 
-const getRange = (mode, anchorValue) => {
+const startOfDay = (date) => {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  return result;
+};
+
+const getQuickRange = (mode, anchorValue) => {
   const anchor = parseInputDate(anchorValue);
   const from = new Date(anchor);
   const to = new Date(anchor);
@@ -75,8 +81,14 @@ const getRange = (mode, anchorValue) => {
     to.setFullYear(from.getFullYear(), from.getMonth() + 1, 0);
   }
 
-  from.setHours(0, 0, 0, 0);
-  return { dateFrom: from.toISOString(), dateTo: endOfDay(to).toISOString(), from, to: endOfDay(to) };
+  return { from: toInputDate(from), to: toInputDate(to) };
+};
+
+const getRequestRange = (dateFrom, dateTo) => {
+  if (!dateFrom || !dateTo) return null;
+  const from = startOfDay(parseInputDate(dateFrom));
+  const to = endOfDay(parseInputDate(dateTo));
+  return { from, to, fromParam: dateFrom, toParam: dateTo };
 };
 
 const summarize = (sales) =>
@@ -102,7 +114,9 @@ const getClientDescription = (client) => {
 
 export default function SalesHistory() {
   const [mode, setMode] = useState('day');
-  const [anchorDate, setAnchorDate] = useState(toInputDate(new Date()));
+  const today = useMemo(() => toInputDate(new Date()), []);
+  const [dateFrom, setDateFrom] = useState(today);
+  const [dateTo, setDateTo] = useState(today);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [clients, setClients] = useState([]);
   const [selectedClient, setSelectedClient] = useState(null);
@@ -114,7 +128,12 @@ export default function SalesHistory() {
   const [successMessage, setSuccessMessage] = useState('');
   const [updatingSaleId, setUpdatingSaleId] = useState('');
 
-  const range = useMemo(() => getRange(mode, anchorDate), [anchorDate, mode]);
+  const range = useMemo(() => getRequestRange(dateFrom, dateTo), [dateFrom, dateTo]);
+  const dateValidationError = useMemo(() => {
+    if (!dateFrom || !dateTo) return 'Selecciona Desde y Hasta para consultar ventas';
+    if (parseInputDate(dateFrom) > parseInputDate(dateTo)) return 'Desde no puede ser mayor que Hasta';
+    return '';
+  }, [dateFrom, dateTo]);
   const summary = useMemo(() => summarize(sales), [sales]);
 
   const loadClients = useCallback(async (query = '') => {
@@ -131,14 +150,21 @@ export default function SalesHistory() {
   }, []);
 
   const loadSales = useCallback(async () => {
+    if (dateValidationError || !range) {
+      setSales([]);
+      setError(dateValidationError);
+      setSuccessMessage('');
+      return;
+    }
+
     setLoading(true);
     setError('');
     setSuccessMessage('');
     try {
       const { data } = await api.get('/sales', {
         params: {
-          dateFrom: range.dateFrom,
-          dateTo: range.dateTo,
+          from: range.fromParam,
+          to: range.toParam,
           ...(statusFilter !== 'ALL' ? { status: statusFilter } : {}),
           ...(selectedClient ? { clientId: selectedClient.id } : {})
         }
@@ -149,7 +175,7 @@ export default function SalesHistory() {
     } finally {
       setLoading(false);
     }
-  }, [range.dateFrom, range.dateTo, selectedClient, statusFilter]);
+  }, [dateValidationError, range, selectedClient, statusFilter]);
 
   useEffect(() => {
     loadSales();
@@ -180,10 +206,29 @@ export default function SalesHistory() {
     }
   };
 
-  const rangeLabel =
-    mode === 'day'
+  const applyQuickRange = (nextMode) => {
+    const anchor = dateFrom || dateTo || today;
+    const quickRange = getQuickRange(nextMode, anchor);
+    setMode(nextMode);
+    setDateFrom(quickRange.from);
+    setDateTo(quickRange.to);
+  };
+
+  const handleDateFromChange = (value) => {
+    setMode('custom');
+    setDateFrom(value);
+  };
+
+  const handleDateToChange = (value) => {
+    setMode('custom');
+    setDateTo(value);
+  };
+
+  const rangeLabel = range
+    ? dateFrom === dateTo
       ? range.from.toLocaleDateString('es-AR')
-      : `${range.from.toLocaleDateString('es-AR')} - ${range.to.toLocaleDateString('es-AR')}`;
+      : `${range.from.toLocaleDateString('es-AR')} - ${range.to.toLocaleDateString('es-AR')}`
+    : 'Rango incompleto';
 
   return (
     <div className="page sales-page">
@@ -224,11 +269,11 @@ export default function SalesHistory() {
 
       <div className="card sales-workspace">
         <section className="sales-toolbar" aria-label="Filtros de ventas">
-          <div className="sales-filter-group">
+          <div className="sales-filter-group sales-filter-group--period">
             <span>Periodo</span>
             <div className="sales-segmented" role="group" aria-label="Periodo">
               {modes.map(({ key, label, icon: Icon }) => (
-                <button key={key} type="button" className={mode === key ? 'active' : ''} onClick={() => setMode(key)}>
+                <button key={key} type="button" className={mode === key ? 'active' : ''} onClick={() => applyQuickRange(key)}>
                   <Icon size={16} aria-hidden="true" />
                   <span>{label}</span>
                 </button>
@@ -236,7 +281,7 @@ export default function SalesHistory() {
             </div>
           </div>
 
-          <div className="sales-filter-group">
+          <div className="sales-filter-group sales-filter-group--status">
             <span>Estado</span>
             <div className="sales-segmented sales-segmented--status" role="group" aria-label="Estado">
               {statusFilters.map((option) => (
@@ -252,9 +297,14 @@ export default function SalesHistory() {
             </div>
           </div>
 
-          <label className="sales-date-filter">
-            <span>Fecha</span>
-            <input type="date" value={anchorDate} onChange={(event) => setAnchorDate(event.target.value)} />
+          <label className="sales-date-filter sales-date-filter--from">
+            <span>Desde</span>
+            <input type="date" value={dateFrom} onChange={(event) => handleDateFromChange(event.target.value)} />
+          </label>
+
+          <label className="sales-date-filter sales-date-filter--to">
+            <span>Hasta</span>
+            <input type="date" value={dateTo} onChange={(event) => handleDateToChange(event.target.value)} />
           </label>
 
           <div className="sales-client-filter">
@@ -276,10 +326,7 @@ export default function SalesHistory() {
             />
           </div>
 
-          <button type="button" className="sales-refresh" onClick={loadSales} disabled={loading} title="Actualizar ventas">
-            <RefreshCw size={16} aria-hidden="true" />
-            <span>Actualizar</span>
-          </button>
+          <span className="sales-active-range">Rango activo: {rangeLabel}</span>
         </section>
 
         <div className="sales-table-card">
@@ -339,7 +386,7 @@ export default function SalesHistory() {
                 {!loading && sales.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="inventory-table__empty">
-                      No hay ventas para los filtros seleccionados
+                      No hay ventas para el período seleccionado
                     </td>
                   </tr>
                 ) : null}

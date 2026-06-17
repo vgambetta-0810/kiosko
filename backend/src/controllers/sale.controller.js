@@ -16,8 +16,8 @@ exports.create = asyncHandler(async (req, res) => {
 exports.list = asyncHandler(async (req, res) => {
   const sellerId = req.user.role === 'SELLER' ? req.user.id : req.query.sellerId;
   const sales = await saleService.listSales({
-    dateFrom: req.query.dateFrom,
-    dateTo: req.query.dateTo,
+    dateFrom: req.query.from || req.query.startDate || req.query.dateFrom,
+    dateTo: req.query.to || req.query.endDate || req.query.dateTo,
     sellerId,
     clientId: req.query.clientId,
     status: req.query.status
