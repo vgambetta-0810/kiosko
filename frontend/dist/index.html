@@ -4,8 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Kiosco School</title>
-    <script type="module" crossorigin src="/assets/index-CSFPCQCq.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-CptsRXhA.css">
+    <script>
+      (() => {
+        const storedTheme = localStorage.getItem('kiosko-theme');
+        const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        const theme = storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : systemTheme;
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-B5vK4G8U.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-Cbc0fOuJ.css">
   </head>
   <body>
     <div id="root"></div>
