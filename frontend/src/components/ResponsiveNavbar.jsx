@@ -14,7 +14,8 @@ const buildNavLinks = (role) => {
       { to: '/ventas', label: 'Ventas' },
       { to: '/clientes', label: 'Clientes' },
       { to: '/proveedores', label: 'Proveedores' },
-      { to: '/compras', label: 'Compras' }
+      { to: '/compras', label: 'Compras' },
+      { to: '/merma', label: 'Merma' }
     );
   }
 

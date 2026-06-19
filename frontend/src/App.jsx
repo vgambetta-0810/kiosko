@@ -12,6 +12,7 @@ import SalesHistory from './pages/SalesHistory';
 import MovementsPage from './pages/MovementsPage';
 import SuppliersPage from './pages/SuppliersPage';
 import PurchasesPage from './pages/PurchasesPage';
+import WastePage from './pages/WastePage';
 
 const Guard = ({ roles, children }) => {
   const { user, loading } = useAuth();
@@ -44,6 +45,7 @@ export default function App() {
         <Route path="/movimientos" element={<Guard roles={["ADMIN"]}><MovementsPage /></Guard>} />
         <Route path="/proveedores" element={<Guard roles={["ADMIN"]}><SuppliersPage /></Guard>} />
         <Route path="/compras" element={<Guard roles={["ADMIN"]}><PurchasesPage /></Guard>} />
+        <Route path="/merma" element={<Guard roles={["ADMIN"]}><WastePage /></Guard>} />
         <Route path="/proveedores-compras" element={<Navigate to="/proveedores" replace />} />
         <Route path="/stock" element={<Navigate to="/inventario" replace />} />
         <Route path="/pos" element={<Navigate to="/ventas" replace />} />
