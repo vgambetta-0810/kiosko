@@ -52,10 +52,25 @@ const StockMovement = sequelize.define('StockMovement', {
   type: { type: DataTypes.STRING, allowNull: false },
   quantity: { type: DataTypes.FLOAT, allowNull: false },
   reason: { type: DataTypes.STRING },
+  note: { type: DataTypes.TEXT },
   referenceType: { type: DataTypes.STRING },
   referenceId: { type: DataTypes.UUID },
   stockBefore: { type: DataTypes.FLOAT },
   stockAfter: { type: DataTypes.FLOAT }
+});
+
+const Waste = sequelize.define('Waste', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  requestId: { type: DataTypes.UUID, allowNull: false, unique: true },
+  quantity: { type: DataTypes.FLOAT, allowNull: false },
+  reason: { type: DataTypes.STRING, allowNull: false },
+  note: { type: DataTypes.TEXT },
+  unitCost: { type: DataTypes.FLOAT, allowNull: false },
+  totalCost: { type: DataTypes.FLOAT, allowNull: false },
+  previousStock: { type: DataTypes.FLOAT, allowNull: false },
+  newStock: { type: DataTypes.FLOAT, allowNull: false },
+  date: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+  status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'ACTIVE' }
 });
 
 const Notification = sequelize.define('Notification', {
@@ -163,6 +178,8 @@ User.belongsTo(User, { as: 'parent', foreignKey: 'parentId' });
 Product.belongsTo(Category, { as: 'categoryEntity', foreignKey: 'categoryId' });
 StockMovement.belongsTo(Product, { as: 'product', foreignKey: 'productId' });
 StockMovement.belongsTo(User, { as: 'createdBy', foreignKey: 'createdById' });
+Waste.belongsTo(Product, { as: 'product', foreignKey: 'productId' });
+Waste.belongsTo(User, { as: 'createdBy', foreignKey: 'createdById' });
 Notification.belongsTo(User, { as: 'user', foreignKey: 'userId' });
 Sale.belongsTo(User, { as: 'seller', foreignKey: 'sellerId' });
 Sale.belongsTo(User, { as: 'client', foreignKey: 'clientId' });
@@ -187,6 +204,7 @@ module.exports = {
   Category,
   Supplier,
   StockMovement,
+  Waste,
   Notification,
   Sale,
   SaleOption,

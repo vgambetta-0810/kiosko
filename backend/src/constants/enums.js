@@ -6,8 +6,20 @@ module.exports = {
     PARENT: 'PARENT'
   },
   paymentMethods: ['CASH', 'TRANSFER', 'CARD', 'MP'],
-  stockMovementTypes: ['IN', 'OUT', 'RESERVED', 'RETURN'],
-  stockMovementReasons: ['SALE', 'PURCHASE', 'RESERVATION', 'EXPIRED', 'MANUAL_ADJUSTMENT'],
+  stockMovementTypes: ['IN', 'OUT', 'RESERVED', 'RETURN', 'WASTE'],
+  stockMovementReasons: [
+    'SALE',
+    'PURCHASE',
+    'RESERVATION',
+    'EXPIRED',
+    'MANUAL_ADJUSTMENT',
+    'BROKEN',
+    'THEFT',
+    'LOSS',
+    'LOAD_ERROR',
+    'INTERNAL_USE',
+    'OTHER'
+  ],
   accountMovementTypes: ['DEBT', 'PAYMENT', 'RECHARGE'],
   accountOwnerTypes: ['CLIENT', 'SUPPLIER'],
   reservationStatus: ['ACTIVE', 'EXPIRED', 'RETURNED', 'COMPLETED']

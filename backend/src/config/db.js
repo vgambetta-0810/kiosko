@@ -120,7 +120,8 @@ const ensureSchema = async () => {
   await addMissingColumns('StockMovements', {
     stockBefore: { type: Sequelize.FLOAT, allowNull: true },
     stockAfter: { type: Sequelize.FLOAT, allowNull: true },
-    supplierId: { type: Sequelize.UUID, allowNull: true }
+    supplierId: { type: Sequelize.UUID, allowNull: true },
+    note: { type: Sequelize.TEXT, allowNull: true }
   });
 };
 

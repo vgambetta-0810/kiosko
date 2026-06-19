@@ -66,6 +66,19 @@ exports.productSupplierSchema = Joi.object({
   isActive: Joi.boolean().optional()
 });
 
+exports.wasteSchema = Joi.object({
+  requestId: Joi.string().guid({ version: ['uuidv4'] }).required(),
+  productId: Joi.string().guid({ version: ['uuidv4'] }).required(),
+  quantity: Joi.number().positive().required(),
+  reason: Joi.string().valid('EXPIRED', 'BROKEN', 'THEFT', 'LOSS', 'LOAD_ERROR', 'INTERNAL_USE', 'OTHER').required(),
+  note: Joi.string().trim().max(1000).optional().allow('', null),
+  date: Joi.date().max('now').required().messages({
+    'date.base': 'La fecha y hora de la merma no es válida',
+    'date.max': 'La fecha y hora de la merma no puede ser futura',
+    'any.required': 'La fecha y hora de la merma es obligatoria'
+  })
+});
+
 exports.saleSchema = Joi.object({
   clientId: Joi.string().guid({ version: ['uuidv4'] }).optional().allow(null, ''),
   items: Joi.array().items(

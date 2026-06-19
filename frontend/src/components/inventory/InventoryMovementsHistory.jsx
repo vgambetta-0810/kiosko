@@ -1,9 +1,11 @@
 import { useMemo } from 'react';
+import { formatDateTime } from '../../utils/dateTime';
 
 const movementTypes = {
   IN: 'Entrada',
   OUT: 'Salida',
   RESERVED: 'Reserva',
+  WASTE: 'Merma',
   RETURN: 'Devolución'
 };
 
@@ -12,7 +14,13 @@ const reasonLabels = {
   PURCHASE: 'Compra',
   RESERVATION: 'Reserva',
   EXPIRED: 'Reserva vencida',
-  MANUAL_ADJUSTMENT: 'Ajuste manual'
+  MANUAL_ADJUSTMENT: 'Ajuste manual',
+  BROKEN: 'Roto',
+  THEFT: 'Robo',
+  LOSS: 'Pérdida',
+  LOAD_ERROR: 'Error de carga',
+  INTERNAL_USE: 'Consumo interno',
+  OTHER: 'Otro'
 };
 
 const getProductId = (movement) => movement.productId || movement.product?.id || movement.product?._id;
@@ -104,7 +112,7 @@ export default function InventoryMovementsHistory({
           <tbody>
             {!loading && visibleMovements.map((movement) => (
               <tr key={movement.id || movement._id}>
-                <td>{new Date(movement.createdAt).toLocaleString('es-AR')}</td>
+                <td>{formatDateTime(movement.createdAt)}</td>
                 <td><strong>{movement.product?.name || 'Producto no disponible'}</strong></td>
                 <td>
                   <span className={`movement-type movement-type--${movement.type.toLowerCase()}`}>
@@ -117,7 +125,12 @@ export default function InventoryMovementsHistory({
                     ? '-'
                     : `${movement.stockBefore} → ${movement.stockAfter}`}
                 </td>
-                <td>{reasonLabels[movement.reason] || movement.reason || '-'}</td>
+                <td>
+                  {movement.type === 'WASTE' && movement.reason === 'EXPIRED'
+                    ? 'Vencido'
+                    : reasonLabels[movement.reason] || movement.reason || '-'}
+                  {movement.note ? <span className="inventory-table__muted">{movement.note}</span> : null}
+                </td>
                 <td>
                   {movement.supplier?.name || movement.referenceType || '-'}
                   {movement.referenceId ? <span className="inventory-table__muted">#{String(movement.referenceId).slice(0, 8)}</span> : null}
