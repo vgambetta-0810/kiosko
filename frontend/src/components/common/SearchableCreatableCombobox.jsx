@@ -30,6 +30,7 @@ function SearchableCreatableCombobox({
   required = false,
   allowCreate = true,
   allowClear = true,
+  showSearchIcon = true,
   getOptionLabel = defaultGetOptionLabel,
   getOptionValue = defaultGetOptionValue,
   getOptionDescription = defaultGetOptionDescription,
@@ -266,13 +267,16 @@ function SearchableCreatableCombobox({
     : null;
 
   return (
-    <div ref={rootRef} className={`entity-combobox${isOpen ? ' is-open' : ''}${feedback ? ' has-error' : ''}`}>
+    <div
+      ref={rootRef}
+      className={`entity-combobox${isOpen ? ' is-open' : ''}${feedback ? ' has-error' : ''}${showSearchIcon ? '' : ' entity-combobox--no-search-icon'}`}
+    >
       <label htmlFor={id}>
         {label}
         {required ? <span aria-hidden="true"> *</span> : null}
       </label>
       <div ref={controlRef} className="entity-combobox__control">
-        <Search size={17} className="entity-combobox__search-icon" aria-hidden="true" />
+        {showSearchIcon ? <Search size={17} className="entity-combobox__search-icon" aria-hidden="true" /> : null}
         <input
           ref={(node) => {
             internalInputRef.current = node;

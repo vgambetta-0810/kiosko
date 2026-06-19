@@ -128,11 +128,12 @@ function CheckoutStep({
         inputRef={paymentMethodRef}
         selectedOption={selectedPaymentMethod}
         options={paymentMethods}
-        placeholder="Buscar o crear método de pago"
+        placeholder="Selecciona un método de pago"
         loading={optionsLoading}
         error={validationErrors.paymentMethod || optionsError}
         disabled={loading}
         required
+        showSearchIcon={false}
         getOptionLabel={getOptionLabel}
         getOptionValue={getOptionCode}
         onSelect={(option) => {
@@ -150,11 +151,12 @@ function CheckoutStep({
         inputRef={saleTypeRef}
         selectedOption={selectedSaleType}
         options={saleTypes}
-        placeholder="Buscar o crear tipo de venta"
+        placeholder="Selecciona un tipo de venta"
         loading={optionsLoading}
         error={validationErrors.saleType || optionsError}
         disabled={loading}
         required
+        showSearchIcon={false}
         getOptionLabel={getOptionLabel}
         getOptionValue={getOptionCode}
         getOptionDescription={getSaleTypeDescription}
@@ -174,10 +176,11 @@ function CheckoutStep({
         inputRef={clientRef}
         selectedOption={selectedClient}
         options={clients}
-        placeholder="Buscar o crear cliente"
+        placeholder="Selecciona o busca un cliente"
         error={validationErrors.client || clientsError}
         disabled={loading}
         required={clientRequired}
+        showSearchIcon={false}
         getOptionLabel={getOptionLabel}
         getOptionValue={getClientId}
         getOptionDescription={getClientDescription}

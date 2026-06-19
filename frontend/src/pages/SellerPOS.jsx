@@ -40,8 +40,8 @@ export default function SellerPOS() {
   const [barcodeQuery, setBarcodeQuery] = useState('');
   const [cart, setCart] = useState([]);
   const [discount, setDiscount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState('CASH');
-  const [status, setStatus] = useState('PAID');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [status, setStatus] = useState('');
   const [clientId, setClientId] = useState('');
   const [step, setStep] = useState('items');
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -314,8 +314,8 @@ export default function SellerPOS() {
       setCart([]);
       setDiscount(0);
       setClientId('');
-      setStatus('PAID');
-      setPaymentMethod('CASH');
+      setStatus('');
+      setPaymentMethod('');
       setStep('items');
       setMessage('Venta registrada correctamente');
 

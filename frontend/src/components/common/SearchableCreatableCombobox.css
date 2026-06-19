@@ -30,6 +30,14 @@
   background: var(--surface-soft);
 }
 
+.entity-combobox .entity-combobox__control input {
+  padding: 10px 92px 10px 38px;
+}
+
+.entity-combobox.entity-combobox--no-search-icon .entity-combobox__control input {
+  padding-left: 12px;
+}
+
 .entity-combobox__control input::placeholder {
   color: var(--text-secondary);
   opacity: 0.78;
