@@ -28,17 +28,36 @@ exports.productSchema = Joi.object({
 }).or('category', 'categoryId', 'newCategoryName');
 
 exports.supplierSchema = Joi.object({
-  name: Joi.string().required(),
-  email: Joi.string().email().optional().allow(''),
-  phone: Joi.string().optional().allow(''),
-  address: Joi.string().optional().allow('')
+  name: Joi.string().trim().required(),
+  businessName: Joi.string().trim().optional().allow('', null),
+  cuit: Joi.string().trim().optional().allow('', null),
+  email: Joi.string().email().optional().allow('', null),
+  phone: Joi.string().trim().optional().allow('', null),
+  address: Joi.string().trim().optional().allow('', null),
+  notes: Joi.string().trim().optional().allow('', null),
+  isActive: Joi.boolean().optional()
 });
 
 exports.purchaseSchema = Joi.object({
-  supplier: Joi.string().hex().length(24).required(),
+  supplierId: Joi.string().guid({ version: ['uuidv4'] }).required(),
   items: Joi.array().items(
-    Joi.object({ product: Joi.string().hex().length(24).required(), quantity: Joi.number().min(1).required(), cost: Joi.number().min(0).required() })
-  ).min(1).required()
+    Joi.object({
+      productId: Joi.string().guid({ version: ['uuidv4'] }).required(),
+      quantity: Joi.number().positive().required(),
+      unitCost: Joi.number().min(0).required()
+    })
+  ).min(1).required(),
+  purchaseDate: Joi.date().optional(),
+  notes: Joi.string().optional().allow('', null),
+  status: Joi.string().uppercase().valid('DRAFT', 'CONFIRMED').optional()
+});
+
+exports.productSupplierSchema = Joi.object({
+  productId: Joi.string().guid({ version: ['uuidv4'] }).required(),
+  supplierSku: Joi.string().trim().optional().allow('', null),
+  lastCost: Joi.number().min(0).optional().allow(null),
+  preferred: Joi.boolean().optional(),
+  isActive: Joi.boolean().optional()
 });
 
 exports.saleSchema = Joi.object({

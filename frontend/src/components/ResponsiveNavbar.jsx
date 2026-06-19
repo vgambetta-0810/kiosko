@@ -10,8 +10,11 @@ const buildNavLinks = (role) => {
   if (role === 'ADMIN') {
     links.push(
       { to: '/inventario', label: 'Inventario' },
+      { to: '/movimientos', label: 'Movimientos' },
       { to: '/ventas', label: 'Ventas' },
-      { to: '/clientes', label: 'Clientes' }
+      { to: '/clientes', label: 'Clientes' },
+      { to: '/proveedores', label: 'Proveedores' },
+      { to: '/compras', label: 'Compras' }
     );
   }
 

@@ -1,11 +1,19 @@
 const StockMovement = require('../models/StockMovement');
 const Product = require('../models/Product');
 const User = require('../models/User');
+const Supplier = require('../models/Supplier');
 const asyncHandler = require('../utils/asyncHandler');
 const { adjustStock, withTransaction } = require('../services/stock.service');
 
 exports.list = asyncHandler(async (_req, res) =>
-  res.json(await StockMovement.findAll({ include: [{ model: Product, as: 'product' }, { model: User, as: 'createdBy' }] }))
+  res.json(await StockMovement.findAll({
+    include: [
+      { model: Product, as: 'product' },
+      { model: User, as: 'createdBy' },
+      { model: Supplier, as: 'supplier' }
+    ],
+    order: [['createdAt', 'DESC']]
+  }))
 );
 
 exports.getProductStock = asyncHandler(async (req, res) => {

@@ -9,6 +9,9 @@ import ClientPanel from './pages/ClientPanel';
 import ClientsPage from './pages/ClientsPage';
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
 import SalesHistory from './pages/SalesHistory';
+import MovementsPage from './pages/MovementsPage';
+import SuppliersPage from './pages/SuppliersPage';
+import PurchasesPage from './pages/PurchasesPage';
 
 const Guard = ({ roles, children }) => {
   const { user, loading } = useAuth();
@@ -38,6 +41,10 @@ export default function App() {
         <Route path="/admin" element={<Navigate to="/" replace />} />
         <Route path="/analytics" element={<Navigate to="/" replace />} />
         <Route path="/inventario" element={<Guard roles={["ADMIN"]}><StockDashboard /></Guard>} />
+        <Route path="/movimientos" element={<Guard roles={["ADMIN"]}><MovementsPage /></Guard>} />
+        <Route path="/proveedores" element={<Guard roles={["ADMIN"]}><SuppliersPage /></Guard>} />
+        <Route path="/compras" element={<Guard roles={["ADMIN"]}><PurchasesPage /></Guard>} />
+        <Route path="/proveedores-compras" element={<Navigate to="/proveedores" replace />} />
         <Route path="/stock" element={<Navigate to="/inventario" replace />} />
         <Route path="/pos" element={<Navigate to="/ventas" replace />} />
         <Route path="/ventas" element={<Guard roles={["ADMIN", "SELLER"]}><SellerPOS /></Guard>} />

@@ -132,20 +132,18 @@ export default function AnalyticsDashboard() {
 
   return (
     <main className="page analytics-page">
-      <header className="inventory-header analytics-header">
-        <div>
-          <p className="inventory-kicker">Gestion comercial</p>
+      <header className="analytics-page-header">
+        <div className="analytics-page-header__title">
           <h1>Inicio</h1>
+          <p className="inventory-kicker">Gestión Comercial</p>
         </div>
-        <div className="analytics-header__tools">
-          <FilterBar
-            filters={filters}
-            onChange={updateFilter}
-            sellers={metadata.sellers}
-            clients={metadata.clients}
-          />
-          <span className="inventory-header__status">{loading ? 'Actualizando...' : 'Datos sincronizados'}</span>
-        </div>
+        <FilterBar
+          filters={filters}
+          onChange={updateFilter}
+          sellers={metadata.sellers}
+          clients={metadata.clients}
+          loading={loading}
+        />
       </header>
 
       {error ? <p className="inventory-error" role="alert">{error}</p> : null}

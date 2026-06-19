@@ -90,6 +90,38 @@ const ensureSchema = async () => {
       allowNull: true
     });
   }
+
+  const addMissingColumns = async (tableName, definitions) => {
+    const table = await queryInterface.describeTable(tableName);
+    for (const [name, definition] of Object.entries(definitions)) {
+      if (!table[name]) await queryInterface.addColumn(tableName, name, definition);
+    }
+  };
+
+  await addMissingColumns('Suppliers', {
+    normalizedName: { type: Sequelize.STRING, allowNull: true },
+    businessName: { type: Sequelize.STRING, allowNull: true },
+    cuit: { type: Sequelize.STRING, allowNull: true },
+    notes: { type: Sequelize.TEXT, allowNull: true }
+  });
+
+  await sequelize.query(
+    `UPDATE Suppliers SET normalizedName = lower(trim(name)) WHERE normalizedName IS NULL OR normalizedName = ''`
+  );
+
+  await addMissingColumns('Purchases', {
+    status: { type: Sequelize.STRING, allowNull: false, defaultValue: 'DRAFT' },
+    purchaseDate: { type: Sequelize.DATE, allowNull: true },
+    notes: { type: Sequelize.TEXT, allowNull: true },
+    confirmedAt: { type: Sequelize.DATE, allowNull: true },
+    cancelledAt: { type: Sequelize.DATE, allowNull: true }
+  });
+
+  await addMissingColumns('StockMovements', {
+    stockBefore: { type: Sequelize.FLOAT, allowNull: true },
+    stockAfter: { type: Sequelize.FLOAT, allowNull: true },
+    supplierId: { type: Sequelize.UUID, allowNull: true }
+  });
 };
 
 const connectDB = async () => {

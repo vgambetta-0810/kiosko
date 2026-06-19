@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 process.env.SQLITE_PATH = ':memory:';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
 process.env.LOGIN_RATE_LIMIT_MAX = '2';
+process.env.API_RATE_LIMIT_MAX = '2';
 process.env.GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'test-google-client';
 process.env.GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 'test-google-secret';
 process.env.GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || 'http://127.0.0.1/auth/google/callback';
@@ -59,6 +60,19 @@ test('los logins exitosos repetidos no consumen el limite de intentos', async ()
 
   const tokens = await Promise.all(responses.map(async (response) => (await response.json()).token));
   assert.equal(new Set(tokens).size, tokens.length);
+});
+
+test('el limite general de la API no bloquea el endpoint de login', async () => {
+  const responses = [];
+
+  for (let index = 0; index < 4; index += 1) {
+    responses.push(await postLogin());
+  }
+
+  assert.deepEqual(
+    responses.map((response) => response.status),
+    [200, 200, 200, 200]
+  );
 });
 
 test('los intentos fallidos siguen limitados', async () => {

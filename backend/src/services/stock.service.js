@@ -5,16 +5,28 @@ const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { roles } = require('../constants/enums');
 
-exports.adjustStock = async ({ productId, type, quantity, reason, referenceType, referenceId, userId, session: transaction }) => {
+exports.adjustStock = async ({ productId, type, quantity, reason, referenceType, referenceId, supplierId, userId, session: transaction }) => {
   const delta = type === 'IN' || type === 'RETURN' ? quantity : -quantity;
   const product = await Product.findByPk(productId, { transaction });
   if (!product) throw new Error('Producto no encontrado');
   if (product.stock + delta < 0) throw new Error(`Stock insuficiente para ${product.name}`);
 
-  product.stock += delta;
+  const stockBefore = Number(product.stock);
+  product.stock = stockBefore + delta;
   await product.save({ transaction });
 
-  await StockMovement.create({ productId, type, quantity, reason, referenceType, referenceId, createdById: userId }, { transaction });
+  await StockMovement.create({
+    productId,
+    type,
+    quantity,
+    reason,
+    referenceType,
+    referenceId,
+    supplierId: supplierId || null,
+    stockBefore,
+    stockAfter: product.stock,
+    createdById: userId
+  }, { transaction });
 
   const threshold = Number(process.env.LOW_STOCK_THRESHOLD || 10);
   if (product.stock <= threshold) {

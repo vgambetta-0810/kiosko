@@ -37,9 +37,13 @@ const Category = sequelize.define('Category', {
 const Supplier = sequelize.define('Supplier', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   name: { type: DataTypes.STRING, allowNull: false },
+  normalizedName: { type: DataTypes.STRING, allowNull: false, unique: true },
+  businessName: { type: DataTypes.STRING },
+  cuit: { type: DataTypes.STRING, unique: true },
   email: { type: DataTypes.STRING },
   phone: { type: DataTypes.STRING },
   address: { type: DataTypes.STRING },
+  notes: { type: DataTypes.TEXT },
   isActive: { type: DataTypes.BOOLEAN, defaultValue: true }
 });
 
@@ -49,7 +53,9 @@ const StockMovement = sequelize.define('StockMovement', {
   quantity: { type: DataTypes.FLOAT, allowNull: false },
   reason: { type: DataTypes.STRING },
   referenceType: { type: DataTypes.STRING },
-  referenceId: { type: DataTypes.UUID }
+  referenceId: { type: DataTypes.UUID },
+  stockBefore: { type: DataTypes.FLOAT },
+  stockAfter: { type: DataTypes.FLOAT }
 });
 
 const Notification = sequelize.define('Notification', {
@@ -95,9 +101,33 @@ const SaleOption = sequelize.define(
 
 const Purchase = sequelize.define('Purchase', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  items: { type: DataTypes.JSON, allowNull: false },
-  total: { type: DataTypes.FLOAT, allowNull: false }
+  items: { type: DataTypes.JSON, allowNull: true },
+  total: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
+  status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'DRAFT' },
+  purchaseDate: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+  notes: { type: DataTypes.TEXT },
+  confirmedAt: { type: DataTypes.DATE },
+  cancelledAt: { type: DataTypes.DATE }
 });
+
+const PurchaseItem = sequelize.define('PurchaseItem', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  quantity: { type: DataTypes.FLOAT, allowNull: false },
+  unitCost: { type: DataTypes.FLOAT, allowNull: false },
+  subtotal: { type: DataTypes.FLOAT, allowNull: false }
+});
+
+const ProductSupplier = sequelize.define(
+  'ProductSupplier',
+  {
+    id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+    supplierSku: { type: DataTypes.STRING },
+    lastCost: { type: DataTypes.FLOAT },
+    preferred: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true }
+  },
+  { indexes: [{ unique: true, fields: ['productId', 'supplierId'] }] }
+);
 
 const Reservation = sequelize.define('Reservation', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
@@ -138,6 +168,14 @@ Sale.belongsTo(User, { as: 'seller', foreignKey: 'sellerId' });
 Sale.belongsTo(User, { as: 'client', foreignKey: 'clientId' });
 Purchase.belongsTo(Supplier, { as: 'supplier', foreignKey: 'supplierId' });
 Purchase.belongsTo(User, { as: 'createdBy', foreignKey: 'createdById' });
+Purchase.hasMany(PurchaseItem, { as: 'purchaseItems', foreignKey: 'purchaseId', onDelete: 'CASCADE' });
+PurchaseItem.belongsTo(Purchase, { as: 'purchase', foreignKey: 'purchaseId' });
+PurchaseItem.belongsTo(Product, { as: 'product', foreignKey: 'productId' });
+Supplier.hasMany(ProductSupplier, { as: 'productLinks', foreignKey: 'supplierId' });
+Product.hasMany(ProductSupplier, { as: 'supplierLinks', foreignKey: 'productId' });
+ProductSupplier.belongsTo(Supplier, { as: 'supplier', foreignKey: 'supplierId' });
+ProductSupplier.belongsTo(Product, { as: 'product', foreignKey: 'productId' });
+StockMovement.belongsTo(Supplier, { as: 'supplier', foreignKey: 'supplierId' });
 Reservation.belongsTo(User, { as: 'client', foreignKey: 'clientId' });
 AccountMovement.belongsTo(Account, { as: 'account', foreignKey: 'accountId' });
 AccountMovement.belongsTo(User, { as: 'createdBy', foreignKey: 'createdById' });
@@ -153,6 +191,8 @@ module.exports = {
   Sale,
   SaleOption,
   Purchase,
+  PurchaseItem,
+  ProductSupplier,
   Reservation,
   Account,
   AccountMovement

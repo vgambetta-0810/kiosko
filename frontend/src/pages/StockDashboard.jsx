@@ -1,29 +1,24 @@
 import { useCallback, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import InventoryMetrics from '../components/inventory/InventoryMetrics';
 import InventoryPagination from '../components/inventory/InventoryPagination';
 import InventoryTable from '../components/inventory/InventoryTable';
 import InventoryToolbar from '../components/inventory/InventoryToolbar';
 import ProductDrawer from '../components/inventory/ProductDrawer';
-import MovementHistory from '../components/MovementHistory';
 import useInventoryFilters from '../hooks/useInventoryFilters';
 import useInventoryProducts from '../hooks/useInventoryProducts';
 
 export default function StockDashboard() {
+  const navigate = useNavigate();
   const inventory = useInventoryProducts();
   const {
     products,
     metrics,
-    selectedProduct,
-    movements,
-    movementFilters,
     loading,
     error,
     message,
     setMessage,
-    reload,
-    loadMovements,
-    handleMovementFilterChange,
-    applyMovementFilters
+    reload
   } = inventory;
   const inventoryFilters = useInventoryFilters(products);
   const [drawerState, setDrawerState] = useState({ isOpen: false, mode: 'create', product: null });
@@ -52,9 +47,9 @@ export default function StockDashboard() {
 
   const handleHistory = useCallback(
     (product) => {
-      loadMovements(product.productId);
+      navigate(`/movimientos?productId=${encodeURIComponent(product.productId)}`);
     },
-    [loadMovements]
+    [navigate]
   );
 
   return (
@@ -99,14 +94,6 @@ export default function StockDashboard() {
           onPageSizeChange={inventoryFilters.updatePageSize}
         />
       </div>
-
-      <MovementHistory
-        movements={movements}
-        selectedProduct={selectedProduct}
-        filters={movementFilters}
-        onFilterChange={handleMovementFilterChange}
-        onApplyFilters={applyMovementFilters}
-      />
 
       <ProductDrawer
         isOpen={drawerState.isOpen}

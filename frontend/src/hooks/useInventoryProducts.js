@@ -11,9 +11,6 @@ export default function useInventoryProducts() {
   const [products, setProducts] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [reservations, setReservations] = useState([]);
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [movements, setMovements] = useState([]);
-  const [movementFilters, setMovementFilters] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -110,37 +107,13 @@ export default function useInventoryProducts() {
     );
   }, [productsWithInventory]);
 
-  const loadMovements = useCallback(async (productId) => {
-    const res = await api.get(`/stock/product/${productId}`);
-    setSelectedProduct(res.data.product);
-    setMovements(res.data.movements || []);
-  }, []);
-
-  const handleMovementFilterChange = useCallback((event) => {
-    const { name, value } = event.target;
-    setMovementFilters((prev) => ({ ...prev, [name]: value }));
-  }, []);
-
-  const applyMovementFilters = useCallback(async () => {
-    const query = new URLSearchParams(movementFilters).toString();
-    const res = await api.get(`/stock/movements?${query}`);
-    setMovements(res.data || []);
-    setSelectedProduct(null);
-  }, [movementFilters]);
-
   return {
     products: productsWithInventory,
     metrics,
-    selectedProduct,
-    movements,
-    movementFilters,
     loading,
     error,
     message,
     setMessage,
-    reload: loadInventory,
-    loadMovements,
-    handleMovementFilterChange,
-    applyMovementFilters
+    reload: loadInventory
   };
 }
