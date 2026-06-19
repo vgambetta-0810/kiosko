@@ -19,6 +19,7 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [identityMatches, setIdentityMatches] = useState([]);
 
   const canChooseRole = user?.role === 'ADMIN';
 
@@ -76,7 +77,33 @@ export default function RegisterPage() {
       setSuccess('Cuenta creada correctamente.');
       navigate(routeByRole(created.role), { replace: true });
     } catch (err) {
-      setError(err?.response?.data?.message || 'Error al registrar la cuenta');
+      const details = err?.response?.data?.details;
+      if (err?.response?.status === 409 && details?.code === 'CLIENT_IDENTITY_MATCH') {
+        setIdentityMatches(details.matches || []);
+        setError('');
+      } else {
+        setError(err?.response?.data?.message || 'Error al registrar la cuenta');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const registerLinked = async (match) => {
+    setIsSubmitting(true);
+    setError('');
+    try {
+      const created = await register({
+        name: name.trim(),
+        email: email.trim(),
+        password,
+        role: 'CLIENT',
+        linkClientId: match.id
+      });
+      setIdentityMatches([]);
+      navigate(routeByRole(created.role), { replace: true });
+    } catch (err) {
+      setError(err?.response?.data?.message || 'No se pudo vincular la cuenta');
     } finally {
       setIsSubmitting(false);
     }
@@ -214,6 +241,22 @@ export default function RegisterPage() {
           <p className="auth-error" role="alert">
             {error}
           </p>
+        ) : null}
+
+        {identityMatches.length ? (
+          <div className="auth-link-matches" role="alert">
+            <strong>Encontramos una ficha de cliente existente</strong>
+            <p>Si sos esta persona, podés vincular tu cuenta y conservar tu historial de compras.</p>
+            {identityMatches.map((match) => (
+              <div key={match.id} className="auth-link-match">
+                <span>{match.name}</span>
+                <small>{[match.email, match.phone, `${match.salesCount || 0} ventas`].filter(Boolean).join(' · ')}</small>
+                <button type="button" onClick={() => registerLinked(match)} disabled={isSubmitting}>
+                  Vincular cuenta
+                </button>
+              </div>
+            ))}
+          </div>
         ) : null}
 
         {success ? <p className="auth-success">{success}</p> : null}
