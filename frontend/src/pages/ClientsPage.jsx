@@ -96,6 +96,7 @@ export default function ClientsPage() {
   const [error, setError] = useState('');
   const [drawer, setDrawer] = useState(null);
   const [clientForm, setClientForm] = useState(emptyClientForm);
+  const [clientMatchDialog, setClientMatchDialog] = useState({ open: false, matches: [], payload: null });
   const [reservationForm, setReservationForm] = useState(emptyReservationForm);
   const [balanceForm, setBalanceForm] = useState(emptyBalanceForm);
   const [saving, setSaving] = useState(false);
@@ -198,7 +199,42 @@ export default function ClientsPage() {
       setMessage('Cliente creado correctamente');
       await reloadCurrentTab();
     } catch (err) {
-      setError(err?.response?.data?.message || 'No se pudo crear el cliente');
+      const details = err?.response?.data?.details;
+      if (err?.response?.status === 409 && details?.code === 'CLIENT_IDENTITY_MATCH') {
+        setClientMatchDialog({ open: true, matches: details.matches || [], payload: clientForm });
+        setError('');
+      } else {
+        setError(err?.response?.data?.message || 'No se pudo crear el cliente');
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resolveClientMatch = async (duplicateAction, match = null) => {
+    if (duplicateAction === 'cancel') {
+      setClientMatchDialog({ open: false, matches: [], payload: null });
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const payload = {
+        ...(clientMatchDialog.payload || clientForm),
+        duplicateAction,
+        ...(match ? { linkClientId: match.id } : {})
+      };
+      const { data } = await api.post('/clients', payload);
+      setSelectedClient(data);
+      setClientForm(emptyClientForm);
+      setClientMatchDialog({ open: false, matches: [], payload: null });
+      setDrawer(null);
+      setMessage(duplicateAction === 'link' ? 'Cliente vinculado correctamente' : 'Cliente creado igualmente');
+      await reloadCurrentTab();
+    } catch (err) {
+      setError(err?.response?.data?.message || 'No se pudo resolver la coincidencia');
     } finally {
       setSaving(false);
     }
@@ -586,6 +622,64 @@ export default function ClientsPage() {
             </button>
           </form>
         </Drawer>
+      ) : null}
+
+      {clientMatchDialog.open ? (
+        <div className="client-match-backdrop" role="presentation" onMouseDown={() => resolveClientMatch('cancel')}>
+          <section className="client-match-dialog" role="dialog" aria-modal="true" aria-label="Coincidencias de cliente" onMouseDown={(event) => event.stopPropagation()}>
+            <header className="client-match-dialog__header">
+              <div>
+                <h2>Se encontró una persona ya registrada</h2>
+                <p>Revisá los datos antes de decidir si corresponde vincular este cliente al usuario existente.</p>
+              </div>
+              <button type="button" onClick={() => resolveClientMatch('cancel')} aria-label="Cancelar">
+                X
+              </button>
+            </header>
+
+            <div className="client-match-list">
+              {clientMatchDialog.matches.map((match) => (
+                <article key={match.id} className="client-match-item">
+                  <div>
+                    <strong>{match.name}</strong>
+                    <span>{match.email || 'Sin email visible'}</span>
+                  </div>
+                  <dl>
+                    <div>
+                      <dt>Teléfono</dt>
+                      <dd>{match.phone || '-'}</dd>
+                    </div>
+                    <div>
+                      <dt>Documento</dt>
+                      <dd>{match.cardId || '-'}</dd>
+                    </div>
+                    <div>
+                      <dt>Creación</dt>
+                      <dd>{match.createdAt ? dateFormatter.format(new Date(match.createdAt)) : '-'}</dd>
+                    </div>
+                    <div>
+                      <dt>Ventas</dt>
+                      <dd>{match.salesCount || 0}</dd>
+                    </div>
+                  </dl>
+                  <p>Coincidencias: {(match.matchReasons || []).join(', ') || 'datos similares'}</p>
+                  <button type="button" className="inventory-primary-action" disabled={saving} onClick={() => resolveClientMatch('link', match)}>
+                    Vincular
+                  </button>
+                </article>
+              ))}
+            </div>
+
+            <footer className="client-match-actions">
+              <button type="button" onClick={() => resolveClientMatch('create')} disabled={saving}>
+                Crear igualmente
+              </button>
+              <button type="button" onClick={() => resolveClientMatch('cancel')} disabled={saving}>
+                Cancelar
+              </button>
+            </footer>
+          </section>
+        </div>
       ) : null}
 
       {drawer === 'reservation' ? (

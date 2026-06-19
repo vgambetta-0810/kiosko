@@ -6,8 +6,10 @@ const ApiError = require('../utils/ApiError');
 const { normalizeOptionName } = require('../utils/saleOptions');
 
 const CLIENT_ATTRIBUTES = ['id', 'name', 'email', 'phone', 'cardId', 'isActive', 'createdAt', 'updatedAt'];
+const CLIENT_MATCH_ATTRIBUTES = [...CLIENT_ATTRIBUTES, 'password', 'googleId', 'role'];
 
 const publicEmail = (email) => (email?.endsWith('@clientes.local') ? '' : email || '');
+const hasAccessAccount = (client) => Boolean(client.password || client.googleId || !client.email?.endsWith('@clientes.local'));
 
 const normalizeClient = async (client) => {
   const raw = client.toJSON ? client.toJSON() : client;
@@ -22,6 +24,105 @@ const normalizeClient = async (client) => {
 const createInternalEmail = (name, phone = '', cardId = '') => {
   const key = normalizeOptionName(`${name} ${phone} ${cardId}`).toLocaleLowerCase('es');
   return `cliente-${createHash('sha256').update(key).digest('hex').slice(0, 24)}@clientes.local`;
+};
+
+const cleanIdentityInput = ({ name = '', email = '', phone = '', cardId = '' } = {}) => ({
+  name: normalizeOptionName(name),
+  email: normalizeOptionName(email).toLocaleLowerCase('es'),
+  phone: normalizeOptionName(phone),
+  cardId: normalizeOptionName(cardId)
+});
+
+const buildMatchWhere = ({ name, email, phone, cardId }, { includeWeakName = true } = {}) => {
+  const clauses = [];
+  if (email) clauses.push({ email });
+  if (phone) clauses.push({ phone });
+  if (cardId) clauses.push({ cardId });
+  if (includeWeakName && name) clauses.push({ name });
+  return clauses;
+};
+
+const getSalesCountByClient = async (clientIds, transaction) => {
+  if (!clientIds.length) return new Map();
+  const rows = await Sale.findAll({
+    where: { clientId: clientIds, deletedAt: null },
+    attributes: ['clientId', [Sale.sequelize.fn('COUNT', Sale.sequelize.col('id')), 'salesCount']],
+    group: ['clientId'],
+    raw: true,
+    transaction
+  });
+  return new Map(rows.map((row) => [row.clientId, Number(row.salesCount || 0)]));
+};
+
+const formatMatchCandidate = (client, salesCount = 0) => {
+  const raw = client.toJSON ? client.toJSON() : client;
+  return {
+    id: raw.id,
+    name: raw.name,
+    email: publicEmail(raw.email),
+    phone: raw.phone || '',
+    cardId: raw.cardId || '',
+    createdAt: raw.createdAt,
+    salesCount,
+    hasAccessAccount: hasAccessAccount(raw)
+  };
+};
+
+const addMatchReasons = (candidate, input) => {
+  const reasons = [];
+  if (input.email && candidate.email?.toLocaleLowerCase('es') === input.email) reasons.push('email');
+  if (input.phone && candidate.phone === input.phone) reasons.push('telefono');
+  if (input.cardId && candidate.cardId === input.cardId) reasons.push('documento');
+  if (input.name && normalizeOptionName(candidate.name) === input.name) reasons.push('nombre');
+  return { ...candidate, matchReasons: reasons };
+};
+
+exports.findClientMatches = async (payload, options = {}) => {
+  const input = cleanIdentityInput(payload);
+  const clauses = buildMatchWhere(input, options);
+  if (!clauses.length) return [];
+
+  const clients = await User.findAll({
+    where: { role: 'CLIENT', [Op.or]: clauses },
+    attributes: CLIENT_MATCH_ATTRIBUTES,
+    order: [['createdAt', 'ASC']],
+    transaction: options.transaction
+  });
+  const salesCountByClient = await getSalesCountByClient(clients.map((client) => client.id), options.transaction);
+  return clients.map((client) => addMatchReasons(formatMatchCandidate(client, salesCountByClient.get(client.id) || 0), input));
+};
+
+const buildConflict = (message, matches) =>
+  new ApiError(409, message, {
+    code: 'CLIENT_IDENTITY_MATCH',
+    matches
+  });
+
+const mergeClientFields = (client, { name, email, phone, cardId, isActive = true } = {}) => {
+  const input = cleanIdentityInput({ name, email, phone, cardId });
+  const updates = {};
+  if (input.name && (!client.name || client.email?.endsWith('@clientes.local'))) updates.name = input.name;
+  if (input.email && client.email?.endsWith('@clientes.local')) updates.email = input.email;
+  if (input.phone && !client.phone) updates.phone = input.phone;
+  if (input.cardId && !client.cardId) updates.cardId = input.cardId;
+  if (isActive && !client.isActive) updates.isActive = true;
+  return updates;
+};
+
+const linkExistingClient = async (clientId, payload, transaction) => {
+  const client = await User.findOne({ where: { id: clientId, role: 'CLIENT' }, transaction });
+  if (!client) throw new ApiError(404, 'Cliente a vincular no encontrado');
+
+  const { email } = cleanIdentityInput(payload);
+  if (email) {
+    const emailOwner = await User.findOne({ where: { email, id: { [Op.ne]: client.id } }, transaction });
+    if (emailOwner) throw new ApiError(409, 'El email ya pertenece a otra persona registrada');
+  }
+
+  const updates = mergeClientFields(client, payload);
+  if (Object.keys(updates).length) await client.update(updates, { transaction });
+  await getOrCreateAccount('CLIENT', client.id, transaction);
+  return client.reload({ transaction });
 };
 
 exports.listClients = async ({ q = '' } = {}) => {
@@ -44,27 +145,27 @@ exports.listClients = async ({ q = '' } = {}) => {
   return Promise.all(clients.map(normalizeClient));
 };
 
-exports.createClient = async ({ name, email = '', phone = '', cardId = '', isActive = true }) => {
+exports.createClient = async ({ name, email = '', phone = '', cardId = '', isActive = true, duplicateAction = '', linkClientId = '' }) => {
   const normalizedName = normalizeOptionName(name);
   if (!normalizedName) throw new ApiError(400, 'El nombre del cliente es obligatorio');
 
-  const cleanEmail = normalizeOptionName(email).toLocaleLowerCase('es');
-  const cleanPhone = normalizeOptionName(phone);
-  const cleanCardId = normalizeOptionName(cardId);
+  if (duplicateAction === 'cancel') throw new ApiError(409, 'Creación de cliente cancelada');
 
-  const duplicateWhere = [];
-  if (cleanEmail) duplicateWhere.push({ email: cleanEmail });
-  if (cleanPhone) duplicateWhere.push({ phone: cleanPhone });
-  if (cleanCardId) duplicateWhere.push({ cardId: cleanCardId });
-  duplicateWhere.push({ name: normalizedName });
-
-  const existing = await User.findOne({ where: { role: 'CLIENT', [Op.or]: duplicateWhere } });
-  if (existing) {
-    if (!existing.isActive && isActive) await existing.update({ isActive: true });
-    return { ...(await normalizeClient(existing)), __created: false };
+  if (duplicateAction === 'link') {
+    if (!linkClientId) throw new ApiError(400, 'Debe indicar el cliente existente a vincular');
+    const linked = await withTransaction((transaction) => linkExistingClient(linkClientId, { name, email, phone, cardId, isActive }, transaction));
+    return { ...(await normalizeClient(linked)), __created: false, __linked: true };
   }
 
-  const internalEmail = cleanEmail || createInternalEmail(normalizedName, cleanPhone, cleanCardId);
+  const matches = await exports.findClientMatches({ name, email, phone, cardId });
+  if (matches.length && duplicateAction !== 'create') {
+    throw buildConflict('Se encontró una persona ya registrada en el sistema. ¿Desea vincular este cliente al usuario existente?', matches);
+  }
+
+  const { email: cleanEmail, phone: cleanPhone, cardId: cleanCardId } = cleanIdentityInput({ name, email, phone, cardId });
+
+  const emailAlreadyUsed = cleanEmail ? await User.findOne({ where: { email: cleanEmail } }) : null;
+  const internalEmail = cleanEmail && !emailAlreadyUsed ? cleanEmail : createInternalEmail(normalizedName, cleanPhone, cleanCardId);
   let client;
   let created = true;
   try {
@@ -85,6 +186,11 @@ exports.createClient = async ({ name, email = '', phone = '', cardId = '', isAct
   }
   await getOrCreateAccount('CLIENT', client.id);
   return { ...(await normalizeClient(client)), __created: created };
+};
+
+exports.linkClientIdentity = async ({ clientId, payload }) => {
+  const linked = await withTransaction((transaction) => linkExistingClient(clientId, payload, transaction));
+  return normalizeClient(linked);
 };
 
 exports.updateClient = async (id, payload) => {

@@ -6,12 +6,18 @@ exports.registerSchema = Joi.object({
   password: Joi.string().min(6).required(),
   role: Joi.string().valid('ADMIN', 'SELLER', 'CLIENT', 'PARENT').default('CLIENT'),
   age: Joi.number().integer().min(0).max(120).optional(),
-  parent: Joi.string().hex().length(24).optional().allow(null)
+  parent: Joi.string().hex().length(24).optional().allow(null),
+  linkClientId: Joi.string().guid({ version: ['uuidv4'] }).optional().allow('', null)
 });
 
 exports.loginSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().required()
+});
+
+exports.googleSchema = Joi.object({
+  idToken: Joi.string().required(),
+  linkClientId: Joi.string().guid({ version: ['uuidv4'] }).optional().allow('', null)
 });
 
 exports.productSchema = Joi.object({
@@ -88,7 +94,9 @@ exports.clientSchema = Joi.object({
   email: Joi.string().email().optional().allow('', null),
   phone: Joi.string().trim().optional().allow('', null),
   cardId: Joi.string().trim().optional().allow('', null),
-  isActive: Joi.boolean().optional()
+  isActive: Joi.boolean().optional(),
+  duplicateAction: Joi.string().valid('link', 'create', 'cancel').optional().allow(''),
+  linkClientId: Joi.string().guid({ version: ['uuidv4'] }).optional().allow('', null)
 });
 
 exports.clientUpdateSchema = Joi.object({

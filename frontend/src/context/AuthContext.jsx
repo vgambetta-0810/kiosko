@@ -36,8 +36,8 @@ export function AuthProvider({ children }) {
     return persistSession(data);
   };
 
-  const loginWithGoogle = async (idToken) => {
-    const { data } = await api.post('/auth/google', { idToken });
+  const loginWithGoogle = async (idToken, linkClientId = '') => {
+    const { data } = await api.post('/auth/google', { idToken, linkClientId });
     return persistSession(data);
   };
 

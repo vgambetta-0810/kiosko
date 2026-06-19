@@ -14,7 +14,10 @@ exports.login = asyncHandler(async (req, res) => {
 });
 exports.me = asyncHandler(async (req, res) => res.json(req.user));
 
-exports.google = authService.passport.authenticate('google', { scope: ['profile', 'email'] });
+exports.google = asyncHandler(async (req, res) => {
+  const payload = await authService.loginWithGoogleToken(req.body);
+  res.json(payload);
+});
 
 exports.googleCallback = [
   authService.passport.authenticate('google', { session: false }),
