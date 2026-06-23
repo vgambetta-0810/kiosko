@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { getProductCodeLabel } from '../../utils/products';
+import { blockNonIntegerKeys, isUnsignedIntegerInput } from '../../utils/quantity';
 
 function SalesTable({ items, highlightedProductId, onUpdateQty, onRemove }) {
   return (
@@ -32,9 +33,11 @@ function SalesTable({ items, highlightedProductId, onUpdateQty, onRemove }) {
                 <td>
                   <input
                     type="number"
-                    step="any"
+                    min="1"
+                    step="1"
                     value={item.quantity}
-                    onChange={(e) => onUpdateQty(item.productId, e.target.value)}
+                    onKeyDown={blockNonIntegerKeys}
+                    onChange={(e) => isUnsignedIntegerInput(e.target.value) && onUpdateQty(item.productId, e.target.value)}
                     aria-label={`Cantidad de ${item.name}`}
                   />
                 </td>

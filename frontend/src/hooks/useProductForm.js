@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../services/api';
 import { getCategoryKey, normalizeCategoryName } from '../utils/categories';
+import { isNonNegativeInteger } from '../utils/quantity';
 
 const EMPTY_PRODUCT = {
   name: '',
@@ -137,6 +138,10 @@ export default function useProductForm({ mode, product, isOpen, onSaved }) {
       setCategoryError('');
 
       try {
+        if (!isNonNegativeInteger(form.stock === '' ? 0 : form.stock)) {
+          setError('El stock debe ser un número entero mayor o igual a cero');
+          return;
+        }
         const categoryPayload = await resolveCategory();
         const payload = {
           name: form.name.trim(),

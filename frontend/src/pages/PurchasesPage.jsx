@@ -6,6 +6,7 @@ import PurchaseDetail from '../components/purchases/PurchaseDetail';
 import PurchaseForm, { emptyPurchase } from '../components/purchases/PurchaseForm';
 import PurchaseList from '../components/purchases/PurchaseList';
 import { api } from '../services/api';
+import { isPositiveInteger } from '../utils/quantity';
 
 const money = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 });
 const dateTime = new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short' });
@@ -131,6 +132,9 @@ export default function PurchasesPage() {
 
   const savePurchase = async (confirm) => {
     if (!purchaseForm.supplierId || !purchaseForm.items.length) return setError('Seleccioná un proveedor y agregá al menos un producto');
+    if (purchaseForm.items.some((item) => !isPositiveInteger(item.quantity))) {
+      return setError('Las cantidades deben ser números enteros mayores a cero');
+    }
     setSaving(true);
     setError('');
     try {

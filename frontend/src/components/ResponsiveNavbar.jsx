@@ -20,7 +20,7 @@ const buildNavLinks = (role) => {
   }
 
   if (role === 'SELLER') {
-    links.push({ to: '/ventas', label: 'Ventas' }, { to: '/clientes', label: 'Clientes' });
+    links.push({ to: '/ventas', label: 'Ventas' });
   }
 
   if (role === 'CLIENT' || role === 'PARENT') {

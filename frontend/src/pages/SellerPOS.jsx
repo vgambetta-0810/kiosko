@@ -7,6 +7,7 @@ import BarcodeInput from '../components/pos/BarcodeInput';
 import usePosKeyboard from '../hooks/usePosKeyboard';
 import { api } from '../services/api';
 import { getProductCodeLabel } from '../utils/products';
+import { isPositiveInteger } from '../utils/quantity';
 
 const PRODUCT_LIMIT = 15;
 
@@ -199,21 +200,27 @@ export default function SellerPOS() {
       const quantity = Number(quantityValue);
       const productId = getEntityId(selectedProduct);
 
-      if (!selectedProduct || !productId || Number.isNaN(quantity)) {
-        setMessage('Cantidad inválida');
+      if (!selectedProduct || !productId || !isPositiveInteger(quantityValue)) {
+        setMessage('La cantidad debe ser un número entero mayor a cero');
         return;
       }
 
       setCart((prev) => {
         const found = prev.find((item) => item.productId === productId);
 
-        if (!found && quantity === 0) return prev;
-
         if (found) {
           const nextQuantity = found.quantity + quantity;
-          if (nextQuantity === 0) return prev.filter((item) => item.productId !== productId);
+          if (nextQuantity > Number(selectedProduct.stock || 0)) {
+            setMessage(`Stock insuficiente. Disponible: ${selectedProduct.stock}`);
+            return prev;
+          }
 
           return prev.map((item) => (item.productId === productId ? { ...item, quantity: nextQuantity } : item));
+        }
+
+        if (quantity > Number(selectedProduct.stock || 0)) {
+          setMessage(`Stock insuficiente. Disponible: ${selectedProduct.stock}`);
+          return prev;
         }
 
         return [
@@ -238,14 +245,18 @@ export default function SellerPOS() {
 
   const updateQty = useCallback((productId, quantityValue) => {
     const quantity = Number(quantityValue);
-    if (quantityValue === '' || Number.isNaN(quantity)) {
-      setMessage('Ingresá una cantidad válida');
+    if (!isPositiveInteger(quantityValue)) {
+      setMessage('La cantidad debe ser un número entero mayor a cero');
       return;
     }
 
     setMessage('');
     setCart((prev) => {
-      if (quantity === 0) return prev.filter((item) => item.productId !== productId);
+      const currentItem = prev.find((item) => item.productId === productId);
+      if (currentItem && quantity > currentItem.stock) {
+        setMessage(`Stock insuficiente. Disponible: ${currentItem.stock}`);
+        return prev;
+      }
       return prev.map((item) => (item.productId === productId ? { ...item, quantity } : item));
     });
   }, []);

@@ -254,6 +254,62 @@ exports.chargeBalance = async ({ clientId, amount, paymentMethod, notes = '', cr
   );
 };
 
+exports.modifyBalance = async ({ clientId, operation, amount, paymentMethod = '', notes = '', createdBy }) => {
+  const client = await User.findOne({ where: { id: clientId, role: 'CLIENT' } });
+  if (!client) throw new ApiError(404, 'Cliente no encontrado');
+
+  return withTransaction(async (session) => {
+    const account = await getOrCreateAccount('CLIENT', clientId, session);
+    const numericAmount = Number(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount < 0) throw new ApiError(400, 'El monto no es válido');
+
+    if (operation === 'RECHARGE') {
+      if (numericAmount <= 0) throw new ApiError(400, 'El monto debe ser mayor a cero');
+      return addMovement({
+        ownerType: 'CLIENT',
+        ownerId: clientId,
+        type: 'RECHARGE',
+        amount: numericAmount,
+        createdBy,
+        session,
+        notes: [paymentMethod, notes].filter(Boolean).join(' - ')
+      });
+    }
+
+    if (operation === 'DEDUCTION') {
+      if (numericAmount <= 0) throw new ApiError(400, 'El monto debe ser mayor a cero');
+      return addMovement({
+        ownerType: 'CLIENT',
+        ownerId: clientId,
+        type: 'DEDUCTION',
+        amount: numericAmount,
+        createdBy,
+        session,
+        requireAvailableBalance: true,
+        notes
+      });
+    }
+
+    if (operation === 'ADJUSTMENT') {
+      const currentBalance = Number(account.balance || 0);
+      const delta = numericAmount - currentBalance;
+      if (delta === 0) throw new ApiError(400, 'El saldo indicado coincide con el saldo actual');
+      return addMovement({
+        ownerType: 'CLIENT',
+        ownerId: clientId,
+        type: 'ADJUSTMENT',
+        amount: Math.abs(delta),
+        delta,
+        createdBy,
+        session,
+        notes
+      });
+    }
+
+    throw new ApiError(400, 'Operación de saldo inválida');
+  });
+};
+
 exports.listProductsByClient = async ({ clientId = '', productId = '' } = {}) => {
   const saleWhere = clientId ? { clientId } : {};
   const reservationWhere = clientId ? { clientId } : {};

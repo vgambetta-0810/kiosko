@@ -43,3 +43,15 @@ exports.chargeBalance = asyncHandler(async (req, res) => {
   });
   res.status(201).json(result);
 });
+
+exports.modifyBalance = asyncHandler(async (req, res) => {
+  const result = await clientService.modifyBalance({
+    clientId: req.params.id,
+    operation: req.body.operation,
+    amount: req.body.amount,
+    paymentMethod: req.body.paymentMethod,
+    notes: req.body.notes,
+    createdBy: req.user.id
+  });
+  res.status(201).json(result);
+});

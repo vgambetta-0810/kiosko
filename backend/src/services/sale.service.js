@@ -49,15 +49,13 @@ const consolidateItems = (items) => {
   const byProduct = new Map();
   for (const rawItem of items || []) {
     const quantity = Number(rawItem.quantity);
-    if (!rawItem.productId || Number.isNaN(quantity) || quantity === 0) {
-      throw new ApiError(400, 'Quantity must be different from 0');
+    if (!rawItem.productId || !Number.isInteger(quantity) || quantity <= 0) {
+      throw new ApiError(400, 'La cantidad debe ser un número entero mayor a cero');
     }
     byProduct.set(rawItem.productId, (byProduct.get(rawItem.productId) || 0) + quantity);
   }
 
-  return [...byProduct.entries()]
-    .filter(([, quantity]) => quantity !== 0)
-    .map(([productId, quantity]) => ({ productId, quantity }));
+  return [...byProduct.entries()].map(([productId, quantity]) => ({ productId, quantity }));
 };
 
 const addProductsToSaleItems = async (sale) => {
@@ -103,7 +101,7 @@ exports.createSale = async ({ sellerId, createdBy, clientId = null, items, disco
     for (const rawItem of consolidatedItems) {
       const product = await Product.findByPk(rawItem.productId, { transaction: session });
       if (!product) throw new ApiError(404, 'Product not found');
-      if (rawItem.quantity > 0 && product.stock < rawItem.quantity) throw new ApiError(400, `Insufficient stock for ${product.name}`);
+      if (product.stock < rawItem.quantity) throw new ApiError(400, `Insufficient stock for ${product.name}`);
 
       preparedItems.push({
         productId: product.id,
@@ -134,8 +132,8 @@ exports.createSale = async ({ sellerId, createdBy, clientId = null, items, disco
     for (const item of preparedItems) {
       await adjustStock({
         productId: item.productId,
-        type: item.quantity < 0 ? 'RETURN' : 'OUT',
-        quantity: Math.abs(item.quantity),
+        type: 'OUT',
+        quantity: item.quantity,
         reason: 'SALE',
         referenceType: 'Sale',
         referenceId: sale.id,

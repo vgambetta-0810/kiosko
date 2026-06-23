@@ -1,5 +1,6 @@
 import { memo, useEffect, useState } from 'react';
 import { getProductCodeLabel } from '../../utils/products';
+import { blockNonIntegerKeys, isPositiveInteger, isUnsignedIntegerInput } from '../../utils/quantity';
 
 function QuantityModal({ isOpen, product, onConfirm, onCancel, inputRef }) {
   const [quantity, setQuantity] = useState('1');
@@ -20,8 +21,8 @@ function QuantityModal({ isOpen, product, onConfirm, onCancel, inputRef }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (quantity.trim() === '' || Number.isNaN(Number(quantity))) {
-      setError('Ingresá una cantidad válida');
+    if (!isPositiveInteger(quantity)) {
+      setError('Ingresá un número entero mayor a cero');
       return;
     }
     onConfirm(quantity);
@@ -46,13 +47,18 @@ function QuantityModal({ isOpen, product, onConfirm, onCancel, inputRef }) {
           <input
             ref={inputRef}
             type="number"
-            step="any"
+            min="1"
+            step="1"
             value={quantity}
             onChange={(e) => {
+              if (!isUnsignedIntegerInput(e.target.value)) return;
               setQuantity(e.target.value);
               setError('');
             }}
-            onKeyDown={handleKeyDown}
+            onKeyDown={(event) => {
+              blockNonIntegerKeys(event);
+              handleKeyDown(event);
+            }}
             className="pos-modal__qty-input"
             aria-label={`Cantidad para ${product.name}`}
           />

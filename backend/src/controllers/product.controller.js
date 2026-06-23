@@ -33,6 +33,13 @@ const ensureCodeAvailable = async (codigoBarras, excludedProductId) => {
     throw new ApiError(409, 'El codigo de barras ya esta registrado');
   }
 };
+const normalizeStock = (stock, fallback = 0) => {
+  const value = stock === undefined || stock === null || stock === '' ? fallback : Number(stock);
+  if (!Number.isInteger(value) || value < 0) {
+    throw new ApiError(400, 'El stock debe ser un número entero mayor o igual a cero');
+  }
+  return value;
+};
 const throwCodeConflict = (err, codigoBarras) => {
   if (codigoBarras && err.name === 'SequelizeUniqueConstraintError') {
     throw new ApiError(409, 'El codigo de barras ya esta registrado');
@@ -68,6 +75,7 @@ exports.create = asyncHandler(async (req, res) => {
   const categoryEntity = await resolveCategory(req.body);
   const payload = {
     ...req.body,
+    stock: normalizeStock(req.body.stock),
     sku: normalizedSku,
     codigoBarras: normalizedBarcode,
     categoryId: categoryEntity.id,
@@ -125,6 +133,9 @@ exports.update = asyncHandler(async (req, res) => {
   if (!product) return res.status(404).json({ message: 'Not found' });
 
   const payload = { ...req.body };
+  if (Object.prototype.hasOwnProperty.call(payload, 'stock')) {
+    payload.stock = normalizeStock(payload.stock);
+  }
   if (Object.prototype.hasOwnProperty.call(payload, 'codigoBarras')) {
     payload.codigoBarras = normalizeBarcode(payload.codigoBarras);
     await ensureCodeAvailable(payload.codigoBarras, product.id);

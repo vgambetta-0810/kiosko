@@ -13,6 +13,7 @@ import MovementsPage from './pages/MovementsPage';
 import SuppliersPage from './pages/SuppliersPage';
 import PurchasesPage from './pages/PurchasesPage';
 import WastePage from './pages/WastePage';
+import PageErrorBoundary from './components/common/PageErrorBoundary';
 
 const Guard = ({ roles, children }) => {
   const { user, loading } = useAuth();
@@ -45,13 +46,13 @@ export default function App() {
         <Route path="/movimientos" element={<Guard roles={["ADMIN"]}><MovementsPage /></Guard>} />
         <Route path="/proveedores" element={<Guard roles={["ADMIN"]}><SuppliersPage /></Guard>} />
         <Route path="/compras" element={<Guard roles={["ADMIN"]}><PurchasesPage /></Guard>} />
-        <Route path="/merma" element={<Guard roles={["ADMIN"]}><WastePage /></Guard>} />
+        <Route path="/merma" element={<Guard roles={["ADMIN"]}><PageErrorBoundary><WastePage /></PageErrorBoundary></Guard>} />
         <Route path="/proveedores-compras" element={<Navigate to="/proveedores" replace />} />
         <Route path="/stock" element={<Navigate to="/inventario" replace />} />
         <Route path="/pos" element={<Navigate to="/ventas" replace />} />
         <Route path="/ventas" element={<Guard roles={["ADMIN", "SELLER"]}><SellerPOS /></Guard>} />
         <Route path="/ventas/historial" element={<Guard roles={["ADMIN", "SELLER"]}><SalesHistory /></Guard>} />
-        <Route path="/clientes" element={<Guard roles={["ADMIN", "SELLER"]}><ClientsPage /></Guard>} />
+        <Route path="/clientes" element={<Guard roles={["ADMIN"]}><ClientsPage /></Guard>} />
         <Route path="/client" element={<Guard roles={["CLIENT", "PARENT"]}><ClientPanel /></Guard>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

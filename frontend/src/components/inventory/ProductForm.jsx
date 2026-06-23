@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import CategoryCombobox from './CategoryCombobox';
+import { blockNonIntegerKeys, isUnsignedIntegerInput } from '../../utils/quantity';
 
 function ProductForm({
   form,
@@ -62,7 +63,7 @@ function ProductForm({
       </div>
       <label>
         Stock
-        <input name="stock" type="number" min="0" step="1" value={form.stock} onChange={onChange} />
+        <input name="stock" type="number" min="0" step="1" value={form.stock} onKeyDown={blockNonIntegerKeys} onChange={(event) => isUnsignedIntegerInput(event.target.value) && onChange(event)} />
       </label>
       {error ? <small className="inventory-error">{error}</small> : null}
       <button type="submit" className="inventory-primary-action" disabled={saving}>

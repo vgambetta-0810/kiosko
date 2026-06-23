@@ -4,6 +4,8 @@ import EntityDrawer from '../components/common/EntityDrawer';
 import WasteForm from '../components/waste/WasteForm';
 import { api } from '../services/api';
 import { formatDateTime, toLocalDateTimeInput } from '../utils/dateTime';
+import { createRequestId } from '../utils/requestId';
+import { isPositiveInteger } from '../utils/quantity';
 
 const money = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 2 });
 const reasonLabels = {
@@ -16,7 +18,20 @@ const reasonLabels = {
   OTHER: 'Otro'
 };
 
-const emptyWaste = () => ({ productId: '', quantity: '', reason: '', note: '', date: toLocalDateTimeInput(), requestId: crypto.randomUUID() });
+const asArray = (value) => (Array.isArray(value) ? value.filter(Boolean) : []);
+const asFiniteNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+const requestErrorMessage = (error, fallback) => error?.response?.data?.message || fallback;
+const emptyWaste = () => ({
+  productId: '',
+  quantity: '',
+  reason: '',
+  note: '',
+  date: toLocalDateTimeInput(),
+  requestId: createRequestId()
+});
 
 export default function WastePage() {
   const [waste, setWaste] = useState([]);
@@ -35,14 +50,35 @@ export default function WastePage() {
     setError('');
     try {
       const params = Object.fromEntries(Object.entries(filters).filter(([, value]) => value));
-      const [wasteResponse, productResponse] = await Promise.all([
+      const [wasteResult, productResult] = await Promise.allSettled([
         api.get('/waste', { params }),
         api.get('/products')
       ]);
-      setWaste(wasteResponse.data || []);
-      setProducts((productResponse.data || []).filter((product) => product.isActive !== false));
-    } catch (requestError) {
-      setError(requestError?.response?.data?.message || 'No se pudo cargar el historial de mermas');
+
+      if (wasteResult.status === 'fulfilled') {
+        setWaste(asArray(wasteResult.value.data));
+      } else {
+        setWaste([]);
+      }
+
+      if (productResult.status === 'fulfilled') {
+        setProducts(asArray(productResult.value.data).filter((product) => product.isActive !== false));
+      } else {
+        setProducts([]);
+      }
+
+      const errors = [];
+      if (wasteResult.status === 'rejected') {
+        errors.push(requestErrorMessage(wasteResult.reason, 'No se pudo cargar el historial de mermas'));
+      }
+      if (productResult.status === 'rejected') {
+        errors.push(requestErrorMessage(productResult.reason, 'No se pudo cargar la lista de productos'));
+      }
+      setError([...new Set(errors)].join('. '));
+    } catch {
+      setWaste([]);
+      setProducts([]);
+      setError('No se pudo cargar el módulo de mermas');
     } finally {
       setLoading(false);
     }
@@ -52,9 +88,11 @@ export default function WastePage() {
 
   const metrics = useMemo(() => {
     const now = new Date();
-    const monthWaste = waste.filter((item) => {
+    const monthWaste = asArray(waste).filter((item) => {
       const date = new Date(item.date);
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+      return !Number.isNaN(date.getTime())
+        && date.getMonth() === now.getMonth()
+        && date.getFullYear() === now.getFullYear();
     });
     const counts = monthWaste.reduce((result, item) => {
       result[item.reason] = (result[item.reason] || 0) + 1;
@@ -63,8 +101,8 @@ export default function WastePage() {
     const frequentReason = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
     return {
       records: monthWaste.length,
-      products: monthWaste.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
-      value: monthWaste.reduce((sum, item) => sum + Number(item.totalCost || 0), 0),
+      products: monthWaste.reduce((sum, item) => sum + asFiniteNumber(item.quantity), 0),
+      value: monthWaste.reduce((sum, item) => sum + asFiniteNumber(item.totalCost), 0),
       reason: frequentReason ? reasonLabels[frequentReason] : 'Sin datos'
     };
   }, [waste]);
@@ -73,14 +111,16 @@ export default function WastePage() {
     event.preventDefault();
     const product = products.find((item) => item.id === form.productId);
     if (!product) return setError('Seleccioná un producto');
-    if (Number(form.quantity) > Number(product.stock)) return setError(`La cantidad no puede superar el stock disponible (${product.stock})`);
+    const quantity = Number(form.quantity);
+    if (!isPositiveInteger(form.quantity)) return setError('La cantidad debe ser un número entero mayor a cero');
+    if (quantity > asFiniteNumber(product.stock)) return setError(`La cantidad no puede superar el stock disponible (${product.stock})`);
     const selectedDate = new Date(form.date);
     if (!form.date || Number.isNaN(selectedDate.getTime())) return setError('Ingresá una fecha y hora válidas');
     if (selectedDate.getTime() > Date.now()) return setError('La fecha y hora de la merma no puede ser futura');
     setSaving(true);
     setError('');
     try {
-      await api.post('/waste', { ...form, date: selectedDate.toISOString(), quantity: Number(form.quantity) });
+      await api.post('/waste', { ...form, date: selectedDate.toISOString(), quantity });
       setDrawer('');
       setForm(emptyWaste());
       setMessage('Merma registrada y stock actualizado');
@@ -144,8 +184,8 @@ export default function WastePage() {
                   <td data-label="Fecha">{formatDateTime(item.date)}</td>
                   <td data-label="Producto"><strong>{item.product?.name || 'Producto no disponible'}</strong></td>
                   <td data-label="Cantidad">{item.quantity}</td>
-                  <td data-label="Motivo"><span className={`waste-reason waste-reason--${item.reason.toLowerCase()}`}>{reasonLabels[item.reason] || item.reason}</span></td>
-                  <td data-label="Valor perdido">{money.format(item.totalCost || 0)}</td>
+                  <td data-label="Motivo"><span className={`waste-reason waste-reason--${String(item.reason || 'other').toLowerCase()}`}>{reasonLabels[item.reason] || item.reason || 'Otro'}</span></td>
+                  <td data-label="Valor perdido">{money.format(asFiniteNumber(item.totalCost))}</td>
                   <td data-label="Usuario">{item.createdBy?.name || 'Sistema'}</td>
                   <td data-label="Observación">{item.note || '-'}</td>
                   <td data-label="Acciones"><button className="waste-detail-button" type="button" onClick={() => { setSelected(item); setDrawer('detail'); }}><Eye size={16} /> Ver</button></td>
@@ -168,13 +208,13 @@ export default function WastePage() {
           <div className="waste-detail">
             <TriangleAlert size={32} />
             <dl>
-              <div><dt>Producto</dt><dd>{selected.product?.name}</dd></div>
+              <div><dt>Producto</dt><dd>{selected.product?.name || 'Producto no disponible'}</dd></div>
               <div><dt>Fecha</dt><dd>{formatDateTime(selected.date)}</dd></div>
-              <div><dt>Motivo</dt><dd>{reasonLabels[selected.reason]}</dd></div>
-              <div><dt>Cantidad</dt><dd>{selected.quantity}</dd></div>
-              <div><dt>Stock</dt><dd>{selected.previousStock} → {selected.newStock}</dd></div>
-              <div><dt>Costo unitario</dt><dd>{money.format(selected.unitCost)}</dd></div>
-              <div><dt>Valor perdido</dt><dd>{money.format(selected.totalCost)}</dd></div>
+              <div><dt>Motivo</dt><dd>{reasonLabels[selected.reason] || selected.reason || 'Otro'}</dd></div>
+              <div><dt>Cantidad</dt><dd>{selected.quantity ?? '-'}</dd></div>
+              <div><dt>Stock</dt><dd>{selected.previousStock ?? '-'} → {selected.newStock ?? '-'}</dd></div>
+              <div><dt>Costo unitario</dt><dd>{money.format(asFiniteNumber(selected.unitCost))}</dd></div>
+              <div><dt>Valor perdido</dt><dd>{money.format(asFiniteNumber(selected.totalCost))}</dd></div>
               <div><dt>Registrado por</dt><dd>{selected.createdBy?.name || 'Sistema'}</dd></div>
               <div><dt>Observación</dt><dd>{selected.note || 'Sin observación'}</dd></div>
             </dl>

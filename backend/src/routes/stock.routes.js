@@ -1,8 +1,10 @@
 const express = require('express');
 const c = require('../controllers/stock.controller');
 const { auth, authorize } = require('../middlewares/auth');
+const validate = require('../middlewares/validate');
+const { stockAdjustmentSchema } = require('../validators/schemas');
 const router = express.Router();
 router.get('/movements', auth, authorize('ADMIN', 'SELLER'), c.list);
 router.get('/product/:id', auth, authorize('ADMIN', 'SELLER'), c.getProductStock);
-router.post('/adjust', auth, authorize('ADMIN'), c.adjust);
+router.post('/adjust', auth, authorize('ADMIN'), validate(stockAdjustmentSchema), c.adjust);
 module.exports = router;

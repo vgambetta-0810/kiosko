@@ -90,6 +90,12 @@ const ensureSchema = async () => {
       allowNull: true
     });
   }
+  if (!accountMovementsTable.delta) {
+    await queryInterface.addColumn('AccountMovements', 'delta', {
+      type: Sequelize.FLOAT,
+      allowNull: true
+    });
+  }
 
   const addMissingColumns = async (tableName, definitions) => {
     const table = await queryInterface.describeTable(tableName);

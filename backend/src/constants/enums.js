@@ -20,7 +20,7 @@ module.exports = {
     'INTERNAL_USE',
     'OTHER'
   ],
-  accountMovementTypes: ['DEBT', 'PAYMENT', 'RECHARGE'],
+  accountMovementTypes: ['DEBT', 'PAYMENT', 'RECHARGE', 'DEDUCTION', 'CONSUMPTION', 'ADJUSTMENT'],
   accountOwnerTypes: ['CLIENT', 'SUPPLIER'],
   reservationStatus: ['ACTIVE', 'EXPIRED', 'RETURNED', 'COMPLETED']
 };

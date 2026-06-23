@@ -4,21 +4,29 @@ const StockMovement = require('../models/StockMovement');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { roles } = require('../constants/enums');
+const ApiError = require('../utils/ApiError');
 
 exports.adjustStock = async ({ productId, type, quantity, reason, note, referenceType, referenceId, supplierId, userId, movementDate, session: transaction }) => {
-  const delta = type === 'IN' || type === 'RETURN' ? quantity : -quantity;
+  const parsedQuantity = Number(quantity);
+  if (!Number.isInteger(parsedQuantity) || parsedQuantity <= 0) {
+    throw new ApiError(400, 'La cantidad debe ser un número entero mayor a cero');
+  }
+  const delta = type === 'IN' || type === 'RETURN' ? parsedQuantity : -parsedQuantity;
   const product = await Product.findByPk(productId, { transaction });
   if (!product) throw new Error('Producto no encontrado');
-  if (product.stock + delta < 0) throw new Error(`Stock insuficiente para ${product.name}`);
 
   const stockBefore = Number(product.stock);
+  if (!Number.isInteger(stockBefore) || stockBefore < 0) {
+    throw new ApiError(409, `El stock actual de ${product.name} no es un número entero válido`);
+  }
+  if (stockBefore + delta < 0) throw new Error(`Stock insuficiente para ${product.name}`);
   product.stock = stockBefore + delta;
   await product.save({ transaction });
 
   await StockMovement.create({
     productId,
     type,
-    quantity: type === 'WASTE' ? -Math.abs(quantity) : quantity,
+    quantity: type === 'WASTE' ? -parsedQuantity : parsedQuantity,
     reason,
     note: note || null,
     referenceType,

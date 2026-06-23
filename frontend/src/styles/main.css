@@ -4876,6 +4876,24 @@ a {
   }
 }
 /* Merma */
+.page-error-fallback {
+  max-width: 720px;
+  margin: 40px auto;
+  padding: 28px;
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+}
+
+.page-error-fallback h1,
+.page-error-fallback p {
+  margin: 0;
+}
+
+.page-error-fallback p {
+  color: var(--text-secondary);
+}
+
 .waste-page {
   display: grid;
   gap: 22px;

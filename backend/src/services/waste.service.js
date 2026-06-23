@@ -52,6 +52,9 @@ exports.createWaste = async ({ requestId, productId, quantity, reason, note, dat
     if (!product || !product.isActive) throw new ApiError(400, 'Producto no encontrado o inactivo');
 
     const parsedQuantity = Number(quantity);
+    if (!Number.isInteger(parsedQuantity) || parsedQuantity <= 0) {
+      throw new ApiError(400, 'La cantidad debe ser un número entero mayor a cero');
+    }
     const previousStock = Number(product.stock);
     if (parsedQuantity > previousStock) {
       throw new ApiError(409, `La cantidad supera el stock disponible (${previousStock})`);

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { AlertTriangle, PackageSearch } from 'lucide-react';
 import { toLocalDateTimeInput } from '../../utils/dateTime';
+import { blockNonIntegerKeys, isUnsignedIntegerInput } from '../../utils/quantity';
 
 const reasons = [
   ['EXPIRED', 'Vencido'],
@@ -12,17 +13,21 @@ const reasons = [
   ['OTHER', 'Otro']
 ];
 
-export default function WasteForm({ products, value, onChange, onSubmit, saving, money }) {
+export default function WasteForm({ products = [], value = {}, onChange, onSubmit, saving, money }) {
+  const safeProducts = useMemo(
+    () => (Array.isArray(products) ? products.filter(Boolean) : []),
+    [products]
+  );
   const [productSearch, setProductSearch] = useState('');
-  const selectedProduct = products.find((product) => product.id === value.productId);
+  const selectedProduct = safeProducts.find((product) => product.id === value.productId);
   const matches = useMemo(() => {
     const query = productSearch.trim().toLowerCase();
-    if (!query) return products.slice(0, 8);
-    return products.filter((product) =>
+    if (!query) return safeProducts.slice(0, 8);
+    return safeProducts.filter((product) =>
       [product.name, product.sku, product.codigoBarras].filter(Boolean)
         .some((text) => String(text).toLowerCase().includes(query))
     ).slice(0, 8);
-  }, [productSearch, products]);
+  }, [productSearch, safeProducts]);
   const total = Number(value.quantity || 0) * Number(selectedProduct?.cost || 0);
 
   return (
@@ -80,7 +85,7 @@ export default function WasteForm({ products, value, onChange, onSubmit, saving,
       <div className="waste-form__grid">
         <label className="waste-form__field">
           <span>Cantidad</span>
-          <input type="number" min="0.01" step="any" max={selectedProduct?.stock} value={value.quantity} onChange={(event) => onChange({ ...value, quantity: event.target.value })} required />
+          <input type="number" min="1" step="1" max={selectedProduct?.stock} value={value.quantity} onKeyDown={blockNonIntegerKeys} onChange={(event) => isUnsignedIntegerInput(event.target.value) && onChange({ ...value, quantity: event.target.value })} required />
         </label>
         <label className="waste-form__field">
           <span>Motivo</span>

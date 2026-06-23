@@ -63,6 +63,26 @@ test('crear merma descuenta stock, calcula el valor perdido y genera movimiento 
   assert.equal(movement.createdAt.toISOString(), date.toISOString());
 });
 
+test('rechaza cantidades decimales sin modificar inventario', async () => {
+  const { admin, product } = await baseData();
+
+  await assert.rejects(
+    createWaste({
+      requestId: crypto.randomUUID(),
+      productId: product.id,
+      quantity: 1.5,
+      reason: 'LOSS',
+      date: new Date(),
+      createdBy: admin.id
+    }),
+    /número entero/
+  );
+
+  assert.equal((await Product.findByPk(product.id)).stock, 10);
+  assert.equal(await Waste.count(), 0);
+  assert.equal(await StockMovement.count(), 0);
+});
+
 test('conserva una hora específica en la merma y en su movimiento', async () => {
   const { admin, product } = await baseData();
   const date = new Date('2025-06-19T21:30:00.000Z');

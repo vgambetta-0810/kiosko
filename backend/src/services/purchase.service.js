@@ -14,8 +14,8 @@ const normalizeItems = (items = []) => {
     const productId = raw.productId || raw.product;
     const quantity = Number(raw.quantity);
     const unitCost = Number(raw.unitCost ?? raw.cost);
-    if (!productId || !Number.isFinite(quantity) || quantity <= 0) {
-      throw new ApiError(400, 'Cada producto debe tener una cantidad mayor a 0');
+    if (!productId || !Number.isInteger(quantity) || quantity <= 0) {
+      throw new ApiError(400, 'Cada producto debe tener una cantidad entera mayor a 0');
     }
     if (!Number.isFinite(unitCost) || unitCost < 0) {
       throw new ApiError(400, 'Cada producto debe tener un costo mayor o igual a 0');

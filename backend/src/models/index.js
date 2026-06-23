@@ -24,7 +24,7 @@ const Product = sequelize.define('Product', {
   categoryId: { type: DataTypes.UUID, allowNull: true },
   price: { type: DataTypes.FLOAT, allowNull: false },
   cost: { type: DataTypes.FLOAT, allowNull: false },
-  stock: { type: DataTypes.FLOAT, defaultValue: 0 },
+  stock: { type: DataTypes.INTEGER, defaultValue: 0 },
   delayDays: { type: DataTypes.INTEGER, defaultValue: 0 },
   isActive: { type: DataTypes.BOOLEAN, defaultValue: true }
 });
@@ -50,25 +50,25 @@ const Supplier = sequelize.define('Supplier', {
 const StockMovement = sequelize.define('StockMovement', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   type: { type: DataTypes.STRING, allowNull: false },
-  quantity: { type: DataTypes.FLOAT, allowNull: false },
+  quantity: { type: DataTypes.INTEGER, allowNull: false },
   reason: { type: DataTypes.STRING },
   note: { type: DataTypes.TEXT },
   referenceType: { type: DataTypes.STRING },
   referenceId: { type: DataTypes.UUID },
-  stockBefore: { type: DataTypes.FLOAT },
-  stockAfter: { type: DataTypes.FLOAT }
+  stockBefore: { type: DataTypes.INTEGER },
+  stockAfter: { type: DataTypes.INTEGER }
 });
 
 const Waste = sequelize.define('Waste', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   requestId: { type: DataTypes.UUID, allowNull: false, unique: true },
-  quantity: { type: DataTypes.FLOAT, allowNull: false },
+  quantity: { type: DataTypes.INTEGER, allowNull: false },
   reason: { type: DataTypes.STRING, allowNull: false },
   note: { type: DataTypes.TEXT },
   unitCost: { type: DataTypes.FLOAT, allowNull: false },
   totalCost: { type: DataTypes.FLOAT, allowNull: false },
-  previousStock: { type: DataTypes.FLOAT, allowNull: false },
-  newStock: { type: DataTypes.FLOAT, allowNull: false },
+  previousStock: { type: DataTypes.INTEGER, allowNull: false },
+  newStock: { type: DataTypes.INTEGER, allowNull: false },
   date: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
   status: { type: DataTypes.STRING, allowNull: false, defaultValue: 'ACTIVE' }
 });
@@ -127,7 +127,7 @@ const Purchase = sequelize.define('Purchase', {
 
 const PurchaseItem = sequelize.define('PurchaseItem', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
-  quantity: { type: DataTypes.FLOAT, allowNull: false },
+  quantity: { type: DataTypes.INTEGER, allowNull: false },
   unitCost: { type: DataTypes.FLOAT, allowNull: false },
   subtotal: { type: DataTypes.FLOAT, allowNull: false }
 });
@@ -169,6 +169,7 @@ const AccountMovement = sequelize.define('AccountMovement', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   type: { type: DataTypes.STRING, allowNull: false },
   amount: { type: DataTypes.FLOAT, allowNull: false },
+  delta: { type: DataTypes.FLOAT, allowNull: true },
   balanceAfter: { type: DataTypes.FLOAT, allowNull: true },
   status: { type: DataTypes.STRING, defaultValue: 'CONFIRMED' },
   notes: { type: DataTypes.STRING }

@@ -56,28 +56,7 @@ test('consolida items repetidos del mismo producto', async () => {
   assert.equal(refreshed.stock, 15);
 });
 
-test('soporta cantidad negativa y devuelve stock con RETURN', async () => {
-  const { seller, product } = await baseData();
-
-  const sale = await createSale({
-    createdBy: seller.id,
-    paymentMethod: 'CASH',
-    status: 'PAID',
-    discount: 0,
-    items: [{ productId: product.id, quantity: -4 }]
-  });
-
-  assert.equal(sale.items[0].quantity, -4);
-
-  const refreshed = await Product.findByPk(product.id);
-  assert.equal(refreshed.stock, 24);
-
-  const movement = await StockMovement.findOne({ where: { referenceId: sale.id } });
-  assert.equal(movement.type, 'RETURN');
-  assert.equal(movement.quantity, 4);
-});
-
-test('elimina producto cuando suma neta queda en cero', async () => {
+test('rechaza cantidades negativas o decimales', async () => {
   const { seller, product } = await baseData();
 
   await assert.rejects(
@@ -86,13 +65,23 @@ test('elimina producto cuando suma neta queda en cero', async () => {
       paymentMethod: 'CASH',
       status: 'PAID',
       discount: 0,
-      items: [
-        { productId: product.id, quantity: 5 },
-        { productId: product.id, quantity: -5 }
-      ]
+      items: [{ productId: product.id, quantity: -4 }]
     }),
-    /Sale has no effective items/
+    /número entero/
   );
+  await assert.rejects(
+    createSale({
+      createdBy: seller.id,
+      paymentMethod: 'CASH',
+      status: 'PAID',
+      discount: 0,
+      items: [{ productId: product.id, quantity: 1.5 }]
+    }),
+    /número entero/
+  );
+
+  assert.equal((await Product.findByPk(product.id)).stock, 20);
+  assert.equal(await StockMovement.count(), 0);
 });
 
 test('filtra ventas por estado y cliente', async () => {

@@ -150,14 +150,6 @@ exports.notifications = asyncHandler(async (req, res) => {
   res.json(await Notification.findAll({ where: { userId: req.user.id }, order: [['createdAt', 'DESC']] }));
 });
 
-exports.chargeBalance = asyncHandler(async (req, res) => {
-  const clientId = await getSingleClientId(req.user);
-  const result = await clientService.chargeBalance({
-    clientId,
-    amount: req.body.amount,
-    paymentMethod: req.body.paymentMethod,
-    notes: req.body.notes || req.body.note || '',
-    createdBy: req.user.id
-  });
-  res.status(201).json(result);
+exports.balanceMutationForbidden = asyncHandler(async () => {
+  throw new ApiError(403, 'La carga de saldo es una operación exclusiva de administradores');
 });

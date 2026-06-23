@@ -1,4 +1,5 @@
 import { Plus, Trash2 } from 'lucide-react';
+import { blockNonIntegerKeys, isUnsignedIntegerInput } from '../../utils/quantity';
 
 export default function PurchaseItemsEditor({ items, products, suggestedProductIds, money, onAdd, onUpdate, onRemove }) {
   return (
@@ -10,7 +11,7 @@ export default function PurchaseItemsEditor({ items, products, suggestedProductI
             <select value={item.productId} onChange={(event) => onUpdate(index, 'productId', event.target.value)}>
               {products.map((product) => <option key={product.id} value={product.id}>{suggestedProductIds.has(product.id) ? '★ ' : ''}{product.name}</option>)}
             </select>
-            <input aria-label="Cantidad" type="number" min="0.01" step="0.01" value={item.quantity} onChange={(event) => onUpdate(index, 'quantity', event.target.value)} />
+            <input aria-label="Cantidad" type="number" min="1" step="1" value={item.quantity} onKeyDown={blockNonIntegerKeys} onChange={(event) => isUnsignedIntegerInput(event.target.value) && onUpdate(index, 'quantity', event.target.value)} />
             <input aria-label="Costo unitario" type="number" min="0" step="0.01" value={item.unitCost} onChange={(event) => onUpdate(index, 'unitCost', event.target.value)} />
             <strong>{money.format(Number(item.quantity || 0) * Number(item.unitCost || 0))}</strong>
             <button type="button" onClick={() => onRemove(index)} aria-label="Quitar producto"><Trash2 size={16} /></button>

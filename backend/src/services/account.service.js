@@ -10,23 +10,24 @@ exports.getOrCreateAccount = async (ownerType, ownerId, session) => {
 };
 
 const movementDelta = (type, amount) => {
-  if (type === 'PAYMENT' || type === 'CONSUMPTION') return -amount;
+  if (type === 'PAYMENT' || type === 'CONSUMPTION' || type === 'DEDUCTION') return -amount;
   return amount;
 };
 
-exports.addMovement = async ({ ownerType, ownerId, type, amount, status = 'CONFIRMED', notes, createdBy, session, requireAvailableBalance = false }) => {
+exports.addMovement = async ({ ownerType, ownerId, type, amount, status = 'CONFIRMED', notes, createdBy, session, requireAvailableBalance = false, delta: explicitDelta }) => {
   const account = await exports.getOrCreateAccount(ownerType, ownerId, session);
   const numericAmount = Number(amount);
   if (!Number.isFinite(numericAmount) || numericAmount <= 0) throw new ApiError(400, 'El monto debe ser mayor a cero');
 
-  const delta = movementDelta(type, numericAmount);
+  const delta = explicitDelta === undefined ? movementDelta(type, numericAmount) : Number(explicitDelta);
+  if (!Number.isFinite(delta) || delta === 0) throw new ApiError(400, 'La modificación de saldo no puede ser cero');
   if (requireAvailableBalance && account.balance + delta < 0) throw new ApiError(400, 'Saldo insuficiente para completar la operacion');
 
-  account.balance += delta;
+  account.balance = Number(account.balance) + delta;
   await account.save({ transaction: session });
 
   const movement = await AccountMovement.create(
-    { accountId: account.id, type, amount: numericAmount, balanceAfter: account.balance, status, notes, createdById: createdBy },
+    { accountId: account.id, type, amount: numericAmount, delta, balanceAfter: account.balance, status, notes, createdById: createdBy },
     { transaction: session }
   );
 

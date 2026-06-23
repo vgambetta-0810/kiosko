@@ -49,6 +49,22 @@ test('guardar un borrador no modifica stock ni crea movimientos', async () => {
   assert.equal(await StockMovement.count(), 0);
 });
 
+test('rechaza cantidades decimales sin modificar stock', async () => {
+  const { admin, supplier, product } = await baseData();
+
+  await assert.rejects(
+    createPurchase({
+      supplierId: supplier.id,
+      createdBy: admin.id,
+      items: [{ productId: product.id, quantity: 2.01, unitCost: 55 }]
+    }),
+    /cantidad entera/
+  );
+
+  assert.equal((await Product.findByPk(product.id)).stock, 4);
+  assert.equal(await StockMovement.count(), 0);
+});
+
 test('confirmar aumenta stock, actualiza costo y registra la relación proveedor-producto', async () => {
   const { admin, supplier, product } = await baseData();
   const purchase = await createPurchase({

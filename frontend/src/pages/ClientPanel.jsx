@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Bell, CreditCard, LoaderCircle, PackageCheck, RefreshCw, Search, TicketCheck } from 'lucide-react';
+import { Bell, LoaderCircle, PackageCheck, RefreshCw, Search, TicketCheck } from 'lucide-react';
 import { api } from '../services/api';
+import { blockNonIntegerKeys, isPositiveInteger, isUnsignedIntegerInput } from '../utils/quantity';
 
 const tabs = [
   { key: 'reservations', label: 'Reservas' },
@@ -24,6 +25,7 @@ const statusLabels = {
   CONSUMPTION: 'Consumo',
   PAYMENT: 'Pago',
   DEBT: 'Deuda',
+  DEDUCTION: 'Descuento',
   ADJUSTMENT: 'Ajuste'
 };
 
@@ -41,6 +43,12 @@ const dateFormatter = new Intl.DateTimeFormat('es-AR', {
 const sumReservationItems = (reservation) => (reservation.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 const reservationProducts = (reservation) => (reservation.items || []).map((item) => item.product?.name || 'Producto').join(', ');
 const normalize = (value) => String(value || '').trim().toLocaleLowerCase('es');
+const movementDelta = (movement) => {
+  if (movement.delta !== null && movement.delta !== undefined) return Number(movement.delta);
+  return ['PAYMENT', 'CONSUMPTION', 'DEDUCTION'].includes(movement.type)
+    ? -Number(movement.amount || 0)
+    : Number(movement.amount || 0);
+};
 
 function Drawer({ title, children, onClose }) {
   return (
@@ -70,7 +78,6 @@ export default function ClientPanel() {
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [reserveQuantity, setReserveQuantity] = useState(1);
-  const [balanceForm, setBalanceForm] = useState({ amount: '', paymentMethod: 'Efectivo', notes: '' });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -81,6 +88,15 @@ export default function ClientPanel() {
   const activeReservations = useMemo(() => reservations.filter((reservation) => reservation.status === 'ACTIVE').length, [reservations]);
   const unreadNotifications = useMemo(() => notifications.filter((notification) => !notification.read).length, [notifications]);
   const visibleBalance = Number(balanceData?.account?.balance ?? summary.balance ?? 0);
+  const balanceMovements = balanceData?.movements || [];
+  const lastRecharge = balanceMovements.find((movement) => movement.type === 'RECHARGE');
+  const lastConsumption = balanceMovements.find((movement) => ['CONSUMPTION', 'PAYMENT'].includes(movement.type));
+  const visibleCards = dashboard.clients || [];
+  const cardStatus = !visibleCards.some((client) => client.cardId)
+    ? 'Sin tarjeta asociada'
+    : visibleCards.every((client) => client.isActive !== false)
+      ? 'Activa'
+      : 'Inactiva';
 
   const categories = useMemo(() => {
     const names = catalog.map((product) => product.category).filter(Boolean);
@@ -152,8 +168,8 @@ export default function ClientPanel() {
     event.preventDefault();
     if (!selectedProduct) return;
     const quantity = Number(reserveQuantity);
-    if (!Number.isInteger(quantity) || quantity <= 0) {
-      setError('La cantidad debe ser mayor a cero');
+    if (!isPositiveInteger(reserveQuantity)) {
+      setError('La cantidad debe ser un número entero mayor a cero');
       return;
     }
     if (quantity > Number(selectedProduct.stock || 0)) {
@@ -189,39 +205,6 @@ export default function ClientPanel() {
       await refreshAfterOperation();
     } catch (err) {
       setError(err?.response?.data?.message || 'No se pudo cancelar la reserva');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const chargeBalance = async (event) => {
-    event.preventDefault();
-    const amount = Number(balanceForm.amount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError('Ingresá un monto mayor a cero');
-      return;
-    }
-    if (!balanceForm.paymentMethod.trim()) {
-      setError('Seleccioná un método de carga');
-      return;
-    }
-
-    setSaving(true);
-    setError('');
-    setMessage('');
-    try {
-      await api.post('/client/me/balance-charge', {
-        amount,
-        paymentMethod: balanceForm.paymentMethod,
-        notes: balanceForm.notes
-      });
-      setMessage('Saldo cargado correctamente');
-      setBalanceForm({ amount: '', paymentMethod: 'Efectivo', notes: '' });
-      setDrawer(null);
-      await refreshAfterOperation();
-      setActiveTab('balance');
-    } catch (err) {
-      setError(err?.response?.data?.message || 'No se pudo cargar saldo');
     } finally {
       setSaving(false);
     }
@@ -450,18 +433,29 @@ export default function ClientPanel() {
             <div className="clients-panel-header">
               <div>
                 <h2>Saldo / Tarjeta</h2>
-                <p>Saldo actual: {moneyFormatter.format(visibleBalance)}</p>
+                <p>Consulta de saldo y movimientos de tu cuenta.</p>
               </div>
-              <button type="button" className="inventory-primary-action" onClick={() => setDrawer('balance')}>
-                <CreditCard size={17} aria-hidden="true" />
-                <span>Cargar saldo</span>
-              </button>
             </div>
 
             <article className="client-balance-card">
-              <span>Disponible para compras</span>
+              <span>Saldo disponible</span>
               <strong>{moneyFormatter.format(visibleBalance)}</strong>
             </article>
+
+            <section className="clients-metrics" aria-label="Resumen de saldo">
+              <article className="clients-metric">
+                <span>Última carga</span>
+                <strong>{lastRecharge?.createdAt ? dateFormatter.format(new Date(lastRecharge.createdAt)) : 'Sin cargas'}</strong>
+              </article>
+              <article className="clients-metric">
+                <span>Último consumo</span>
+                <strong>{lastConsumption?.createdAt ? dateFormatter.format(new Date(lastConsumption.createdAt)) : 'Sin consumos'}</strong>
+              </article>
+              <article className="clients-metric">
+                <span>Estado de la tarjeta</span>
+                <strong>{cardStatus}</strong>
+              </article>
+            </section>
 
             <div className="clients-table-card">
               <table className="inventory-table clients-table">
@@ -475,7 +469,7 @@ export default function ClientPanel() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(balanceData?.movements || []).map((movement) => (
+                  {balanceMovements.map((movement) => (
                     <tr key={movement.id}>
                       <td>{movement.createdAt ? dateFormatter.format(new Date(movement.createdAt)) : '-'}</td>
                       <td>
@@ -483,12 +477,12 @@ export default function ClientPanel() {
                           {statusLabels[movement.type] || movement.type}
                         </span>
                       </td>
-                      <td>{moneyFormatter.format(Number(movement.amount || 0))}</td>
+                      <td>{movementDelta(movement) >= 0 ? '+' : '-'} {moneyFormatter.format(Math.abs(movementDelta(movement)))}</td>
                       <td>{movement.balanceAfter === null || movement.balanceAfter === undefined ? '-' : moneyFormatter.format(Number(movement.balanceAfter || 0))}</td>
                       <td>{movement.notes || '-'}</td>
                     </tr>
                   ))}
-                  {!loading && !balanceData?.movements?.length ? (
+                  {!loading && !balanceMovements.length ? (
                     <tr>
                       <td colSpan={5} className="inventory-table__empty">
                         Todavía no hay movimientos de saldo
@@ -536,7 +530,7 @@ export default function ClientPanel() {
             </div>
             <label>
               Cantidad a reservar
-              <input min="1" max={selectedProduct.stock} type="number" value={reserveQuantity} onChange={(event) => setReserveQuantity(event.target.value)} />
+              <input min="1" max={selectedProduct.stock} step="1" type="number" value={reserveQuantity} onKeyDown={blockNonIntegerKeys} onChange={(event) => isUnsignedIntegerInput(event.target.value) && setReserveQuantity(event.target.value)} />
             </label>
             <div className="client-drawer-total">
               <span>Total estimado</span>
@@ -549,32 +543,6 @@ export default function ClientPanel() {
         </Drawer>
       ) : null}
 
-      {drawer === 'balance' ? (
-        <Drawer title="Cargar saldo" onClose={() => setDrawer(null)}>
-          <form className="client-form" onSubmit={chargeBalance}>
-            <label>
-              Monto
-              <input min="0.01" step="0.01" type="number" value={balanceForm.amount} onChange={(event) => setBalanceForm((current) => ({ ...current, amount: event.target.value }))} />
-            </label>
-            <label>
-              Método de carga
-              <select value={balanceForm.paymentMethod} onChange={(event) => setBalanceForm((current) => ({ ...current, paymentMethod: event.target.value }))}>
-                <option>Efectivo</option>
-                <option>Transferencia</option>
-                <option>Mercado Pago</option>
-                <option>Tarjeta</option>
-              </select>
-            </label>
-            <label>
-              Observación
-              <textarea rows={3} value={balanceForm.notes} onChange={(event) => setBalanceForm((current) => ({ ...current, notes: event.target.value }))} />
-            </label>
-            <button type="submit" className="inventory-primary-action" disabled={saving}>
-              {saving ? 'Cargando...' : 'Registrar carga'}
-            </button>
-          </form>
-        </Drawer>
-      ) : null}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CreditCard, LoaderCircle, Plus, RefreshCw, Search, Users } from 'lucide-react';
 import SearchableCreatableCombobox from '../components/common/SearchableCreatableCombobox';
 import { api } from '../services/api';
+import { blockNonIntegerKeys, isPositiveInteger, isUnsignedIntegerInput } from '../utils/quantity';
 
 const tabs = [
   { key: 'reservations', label: 'Reservas' },
@@ -31,6 +32,7 @@ const statusLabels = {
   CONSUMPTION: 'Consumo',
   PAYMENT: 'Pago',
   DEBT: 'Deuda',
+  DEDUCTION: 'Descuento',
   ADJUSTMENT: 'Ajuste'
 };
 
@@ -61,7 +63,18 @@ const getProductDescription = (product) => `${moneyFormatter.format(Number(produ
 
 const emptyClientForm = { name: '', email: '', phone: '', cardId: '' };
 const emptyReservationForm = { client: null, product: null, quantity: 1, expiresAt: todayInput(), status: 'ACTIVE' };
-const emptyBalanceForm = { client: null, amount: '', paymentMethod: 'Efectivo', notes: '' };
+const emptyBalanceForm = { client: null, operation: 'RECHARGE', amount: '', paymentMethod: 'Efectivo', notes: '' };
+const balanceOperationLabels = {
+  RECHARGE: 'Cargar saldo',
+  DEDUCTION: 'Descontar saldo',
+  ADJUSTMENT: 'Ajustar saldo'
+};
+const movementDelta = (movement) => {
+  if (movement.delta !== null && movement.delta !== undefined) return Number(movement.delta);
+  return ['PAYMENT', 'CONSUMPTION', 'DEDUCTION'].includes(movement.type)
+    ? -Number(movement.amount || 0)
+    : Number(movement.amount || 0);
+};
 
 function Drawer({ title, children, onClose }) {
   return (
@@ -246,6 +259,10 @@ export default function ClientsPage() {
       setError('Seleccioná cliente y producto para crear la reserva');
       return;
     }
+    if (!isPositiveInteger(reservationForm.quantity)) {
+      setError('La cantidad debe ser un número entero mayor a cero');
+      return;
+    }
 
     setSaving(true);
     setError('');
@@ -276,10 +293,15 @@ export default function ClientsPage() {
     }
   };
 
-  const chargeBalance = async (event) => {
+  const modifyBalance = async (event) => {
     event.preventDefault();
     if (!balanceForm.client) {
-      setError('Seleccioná un cliente para cargar saldo');
+      setError('Seleccioná un cliente');
+      return;
+    }
+    const amount = Number(balanceForm.amount);
+    if (!Number.isFinite(amount) || amount < 0 || (balanceForm.operation !== 'ADJUSTMENT' && amount <= 0)) {
+      setError(balanceForm.operation === 'ADJUSTMENT' ? 'Ingresá el nuevo saldo' : 'Ingresá un monto mayor a cero');
       return;
     }
 
@@ -287,18 +309,19 @@ export default function ClientsPage() {
     setError('');
     setMessage('');
     try {
-      await api.post(`/clients/${balanceForm.client.id}/balance-charge`, {
-        amount: Number(balanceForm.amount),
+      await api.post(`/clients/${balanceForm.client.id}/balance-movements`, {
+        operation: balanceForm.operation,
+        amount,
         paymentMethod: balanceForm.paymentMethod,
         notes: balanceForm.notes
       });
       setSelectedClient(balanceForm.client);
       setBalanceForm(emptyBalanceForm);
       setDrawer(null);
-      setMessage('Saldo cargado correctamente');
+      setMessage(`${balanceOperationLabels[balanceForm.operation]} registrado correctamente`);
       await reloadCurrentTab();
     } catch (err) {
-      setError(err?.response?.data?.message || 'No se pudo cargar saldo');
+      setError(err?.response?.data?.message || 'No se pudo modificar el saldo');
     } finally {
       setSaving(false);
     }
@@ -539,17 +562,22 @@ export default function ClientsPage() {
                 <h2>Saldo / Tarjeta</h2>
                 <p>{selectedClient ? `Saldo actual: ${moneyFormatter.format(Number(balanceData?.account?.balance || selectedClient.balance || 0))}` : 'Seleccioná un cliente para ver movimientos.'}</p>
               </div>
-              <button
-                type="button"
-                className="inventory-primary-action"
-                onClick={() => {
-                  setBalanceForm((current) => ({ ...current, client: selectedClient || current.client }));
-                  setDrawer('balance');
-                }}
-              >
-                <CreditCard size={17} aria-hidden="true" />
-                <span>Cargar saldo</span>
-              </button>
+              <div className="clients-row-actions">
+                {Object.entries(balanceOperationLabels).map(([operation, label]) => (
+                  <button
+                    key={operation}
+                    type="button"
+                    className={operation === 'RECHARGE' ? 'inventory-primary-action' : undefined}
+                    onClick={() => {
+                      setBalanceForm({ ...emptyBalanceForm, client: selectedClient, operation });
+                      setDrawer('balance');
+                    }}
+                  >
+                    {operation === 'RECHARGE' ? <CreditCard size={17} aria-hidden="true" /> : null}
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="clients-table-card">
@@ -560,6 +588,7 @@ export default function ClientsPage() {
                     <th>Tipo</th>
                     <th>Monto</th>
                     <th>Saldo resultante</th>
+                    <th>Administrador</th>
                     <th>Observación</th>
                   </tr>
                 </thead>
@@ -572,21 +601,22 @@ export default function ClientsPage() {
                           {statusLabels[movement.type] || movement.type}
                         </span>
                       </td>
-                      <td>{moneyFormatter.format(Number(movement.amount || 0))}</td>
+                      <td>{movementDelta(movement) >= 0 ? '+' : '-'} {moneyFormatter.format(Math.abs(movementDelta(movement)))}</td>
                       <td>{movement.balanceAfter === null || movement.balanceAfter === undefined ? '-' : moneyFormatter.format(Number(movement.balanceAfter || 0))}</td>
+                      <td>{movement.createdBy?.name || 'Sistema'}</td>
                       <td>{movement.notes || '-'}</td>
                     </tr>
                   ))}
                   {selectedClient && !loading && !balanceData?.movements?.length ? (
                     <tr>
-                      <td colSpan={5} className="inventory-table__empty">
+                      <td colSpan={6} className="inventory-table__empty">
                         Este cliente todavía no tiene movimientos de saldo
                       </td>
                     </tr>
                   ) : null}
                   {!selectedClient ? (
                     <tr>
-                      <td colSpan={5} className="inventory-table__empty">
+                      <td colSpan={6} className="inventory-table__empty">
                         Seleccioná un cliente para ver saldo y movimientos
                       </td>
                     </tr>
@@ -713,7 +743,7 @@ export default function ClientsPage() {
             />
             <label>
               Cantidad
-              <input min="1" type="number" value={reservationForm.quantity} onChange={(event) => setReservationForm((current) => ({ ...current, quantity: event.target.value }))} />
+              <input min="1" step="1" type="number" value={reservationForm.quantity} onKeyDown={blockNonIntegerKeys} onChange={(event) => isUnsignedIntegerInput(event.target.value) && setReservationForm((current) => ({ ...current, quantity: event.target.value }))} />
             </label>
             <label>
               Fecha
@@ -735,8 +765,8 @@ export default function ClientsPage() {
       ) : null}
 
       {drawer === 'balance' ? (
-        <Drawer title="Cargar saldo" onClose={() => setDrawer(null)}>
-          <form className="client-form" onSubmit={chargeBalance}>
+        <Drawer title={balanceOperationLabels[balanceForm.operation]} onClose={() => setDrawer(null)}>
+          <form className="client-form" onSubmit={modifyBalance}>
             <SearchableCreatableCombobox
               id="balance-client"
               label="Cliente"
@@ -751,24 +781,32 @@ export default function ClientsPage() {
               onClear={() => setBalanceForm((current) => ({ ...current, client: null }))}
             />
             <label>
-              Monto
-              <input min="0.01" step="0.01" type="number" value={balanceForm.amount} onChange={(event) => setBalanceForm((current) => ({ ...current, amount: event.target.value }))} />
-            </label>
-            <label>
-              Medio de carga
-              <select value={balanceForm.paymentMethod} onChange={(event) => setBalanceForm((current) => ({ ...current, paymentMethod: event.target.value }))}>
-                <option>Efectivo</option>
-                <option>Transferencia</option>
-                <option>Mercado Pago</option>
-                <option>Tarjeta</option>
+              Operación
+              <select value={balanceForm.operation} onChange={(event) => setBalanceForm((current) => ({ ...current, operation: event.target.value }))}>
+                {Object.entries(balanceOperationLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </label>
+            <label>
+              {balanceForm.operation === 'ADJUSTMENT' ? 'Nuevo saldo' : 'Monto'}
+              <input min={balanceForm.operation === 'ADJUSTMENT' ? '0' : '0.01'} step="0.01" type="number" value={balanceForm.amount} onChange={(event) => setBalanceForm((current) => ({ ...current, amount: event.target.value }))} required />
+            </label>
+            {balanceForm.operation === 'RECHARGE' ? (
+              <label>
+                Medio de carga
+                <select value={balanceForm.paymentMethod} onChange={(event) => setBalanceForm((current) => ({ ...current, paymentMethod: event.target.value }))}>
+                  <option>Efectivo</option>
+                  <option>Transferencia</option>
+                  <option>Mercado Pago</option>
+                  <option>Tarjeta</option>
+                </select>
+              </label>
+            ) : null}
             <label>
               Observación
               <textarea rows={3} value={balanceForm.notes} onChange={(event) => setBalanceForm((current) => ({ ...current, notes: event.target.value }))} />
             </label>
             <button type="submit" className="inventory-primary-action" disabled={saving}>
-              {saving ? 'Cargando...' : 'Registrar carga'}
+              {saving ? 'Guardando...' : balanceOperationLabels[balanceForm.operation]}
             </button>
           </form>
         </Drawer>

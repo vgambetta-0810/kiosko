@@ -29,7 +29,7 @@ exports.productSchema = Joi.object({
   newCategoryName: Joi.string().optional().allow(''),
   price: Joi.number().min(0).required(),
   cost: Joi.number().min(0).required(),
-  stock: Joi.number().min(0).default(0),
+  stock: Joi.number().integer().min(0).default(0),
   delayDays: Joi.number().min(0).default(0)
 }).or('category', 'categoryId', 'newCategoryName');
 
@@ -49,7 +49,7 @@ exports.purchaseSchema = Joi.object({
   items: Joi.array().items(
     Joi.object({
       productId: Joi.string().guid({ version: ['uuidv4'] }).required(),
-      quantity: Joi.number().positive().required(),
+      quantity: Joi.number().integer().min(1).required(),
       unitCost: Joi.number().min(0).required()
     })
   ).min(1).required(),
@@ -69,7 +69,7 @@ exports.productSupplierSchema = Joi.object({
 exports.wasteSchema = Joi.object({
   requestId: Joi.string().guid({ version: ['uuidv4'] }).required(),
   productId: Joi.string().guid({ version: ['uuidv4'] }).required(),
-  quantity: Joi.number().positive().required(),
+  quantity: Joi.number().integer().min(1).required(),
   reason: Joi.string().valid('EXPIRED', 'BROKEN', 'THEFT', 'LOSS', 'LOAD_ERROR', 'INTERNAL_USE', 'OTHER').required(),
   note: Joi.string().trim().max(1000).optional().allow('', null),
   date: Joi.date().max('now').required().messages({
@@ -82,7 +82,7 @@ exports.wasteSchema = Joi.object({
 exports.saleSchema = Joi.object({
   clientId: Joi.string().guid({ version: ['uuidv4'] }).optional().allow(null, ''),
   items: Joi.array().items(
-    Joi.object({ productId: Joi.string().guid({ version: ['uuidv4'] }).required(), quantity: Joi.number().invalid(0).required() })
+    Joi.object({ productId: Joi.string().guid({ version: ['uuidv4'] }).required(), quantity: Joi.number().integer().min(1).required() })
   ).min(1).required(),
   discount: Joi.number().min(0).default(0),
   paymentMethod: Joi.string().trim().required(),
@@ -114,7 +114,7 @@ exports.saleStatusSchema = Joi.object({
 exports.reservationSchema = Joi.object({
   client: Joi.string().guid({ version: ['uuidv4'] }).required(),
   items: Joi.array().items(
-    Joi.object({ product: Joi.string().guid({ version: ['uuidv4'] }).required(), quantity: Joi.number().min(1).required(), price: Joi.number().min(0).required() })
+    Joi.object({ product: Joi.string().guid({ version: ['uuidv4'] }).required(), quantity: Joi.number().integer().min(1).required(), price: Joi.number().min(0).required() })
   ).min(1).required(),
   paidAmount: Joi.number().min(0).default(0),
   expiresAt: Joi.date().required(),
@@ -130,6 +130,13 @@ exports.clientReservationSchema = Joi.object({
   quantity: Joi.number().integer().min(1).required()
 });
 
+exports.stockAdjustmentSchema = Joi.object({
+  productId: Joi.string().guid({ version: ['uuidv4'] }).required(),
+  type: Joi.string().valid('IN', 'OUT').required(),
+  quantity: Joi.number().integer().min(1).required(),
+  reason: Joi.string().trim().optional().allow('')
+});
+
 exports.balanceChargeSchema = Joi.object({
   amount: Joi.number().positive().required(),
   paymentMethod: Joi.string().trim().required(),
@@ -137,10 +144,17 @@ exports.balanceChargeSchema = Joi.object({
   note: Joi.string().trim().optional().allow('')
 });
 
+exports.balanceOperationSchema = Joi.object({
+  operation: Joi.string().valid('RECHARGE', 'DEDUCTION', 'ADJUSTMENT').required(),
+  amount: Joi.number().min(0).required(),
+  paymentMethod: Joi.string().trim().optional().allow(''),
+  notes: Joi.string().trim().max(1000).optional().allow('')
+});
+
 exports.accountMovementSchema = Joi.object({
   ownerType: Joi.string().valid('CLIENT', 'SUPPLIER').required(),
   ownerId: Joi.string().guid({ version: ['uuidv4'] }).required(),
-  type: Joi.string().valid('DEBT', 'PAYMENT', 'RECHARGE', 'CONSUMPTION', 'ADJUSTMENT').required(),
+  type: Joi.string().valid('DEBT', 'PAYMENT', 'RECHARGE', 'DEDUCTION', 'CONSUMPTION', 'ADJUSTMENT').required(),
   amount: Joi.number().min(0.01).required(),
   notes: Joi.string().optional().allow('')
 });
