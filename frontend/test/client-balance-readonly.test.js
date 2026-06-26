@@ -9,6 +9,7 @@ test('el panel del cliente mantiene saldo en modo solo lectura', async () => {
   assert.equal(source.includes('Cargar saldo'), false);
   assert.equal(source.includes('balanceForm'), false);
   assert.equal(source.includes('Saldo disponible'), true);
-  assert.equal(source.includes('Última carga'), true);
-  assert.equal(source.includes('Último consumo'), true);
+  assert.equal(source.includes('Ultima carga'), true);
+  assert.equal(source.includes('Ultimo consumo'), true);
+  assert.equal(source.includes('Ver movimientos'), true);
 });

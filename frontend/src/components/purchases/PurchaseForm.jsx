@@ -1,7 +1,6 @@
 import { Check } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import SearchableCreatableCombobox from '../common/SearchableCreatableCombobox';
 import PurchaseItemsEditor from './PurchaseItemsEditor';
+import PurchaseSupplierSelector from './PurchaseSupplierSelector';
 
 export const emptyPurchase = (supplierId = '') => ({
   supplierId,
@@ -13,12 +12,18 @@ export const emptyPurchase = (supplierId = '') => ({
 export default function PurchaseForm({
   value,
   suppliers,
+  supplierOptions,
+  supplierLoading,
+  supplierError,
   products,
   suggestedProductIds,
   saving,
   money,
   onChange,
+  onSupplierSearch,
   onSupplierChange,
+  onSupplierCreated,
+  onSupplierTextChange,
   onAddItem,
   onUpdateItem,
   onRemoveItem,
@@ -31,19 +36,17 @@ export default function PurchaseForm({
     <div className="purchase-form">
       <div className="purchase-form__grid">
         <div>
-          <SearchableCreatableCombobox
-            id="purchase-supplier"
-            label="Proveedor"
-            required
-            allowCreate={false}
-            selectedOption={selectedSupplier}
-            options={suppliers.filter((supplier) => supplier.isActive)}
-            placeholder="Buscar proveedor"
-            getOptionDescription={(supplier) => supplier.cuit || supplier.businessName || ''}
+          <PurchaseSupplierSelector
+            selectedSupplier={selectedSupplier}
+            options={supplierOptions}
+            loading={supplierLoading}
+            error={supplierError}
+            onSearch={onSupplierSearch}
+            onInputChange={onSupplierTextChange}
             onSelect={(supplier) => onSupplierChange(supplier.id)}
             onClear={() => onSupplierChange('')}
+            onCreated={onSupplierCreated}
           />
-          <Link className="purchase-create-supplier-link" to="/proveedores">¿No existe? Crear proveedor</Link>
         </div>
         <label>Fecha<input type="date" value={value.purchaseDate} onChange={(event) => onChange((current) => ({ ...current, purchaseDate: event.target.value }))} /></label>
       </div>

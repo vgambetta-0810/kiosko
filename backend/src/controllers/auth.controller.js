@@ -12,7 +12,12 @@ exports.login = asyncHandler(async (req, res) => {
   const payload = await authService.login(req.body);
   res.json(payload);
 });
-exports.me = asyncHandler(async (req, res) => res.json(req.user));
+exports.me = asyncHandler(async (req, res) => res.json(authService.toPublicUser(req.user)));
+
+exports.changePassword = asyncHandler(async (req, res) => {
+  const user = await authService.changePassword({ userId: req.user.id, ...req.body });
+  res.json(user);
+});
 
 exports.google = asyncHandler(async (req, res) => {
   const payload = await authService.loginWithGoogleToken(req.body);

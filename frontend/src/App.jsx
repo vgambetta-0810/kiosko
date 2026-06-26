@@ -5,7 +5,13 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import StockDashboard from './pages/StockDashboard';
 import SellerPOS from './pages/SellerPOS';
-import ClientPanel from './pages/ClientPanel';
+import ClientPanel, {
+  ClientBalancePage,
+  ClientMovementsPage,
+  NewReservationPage,
+  ClientNotificationsPage,
+  ClientReservationsPage
+} from './pages/ClientPanel';
 import ClientsPage from './pages/ClientsPage';
 import AnalyticsDashboard from './pages/AnalyticsDashboard';
 import SalesHistory from './pages/SalesHistory';
@@ -14,6 +20,7 @@ import SuppliersPage from './pages/SuppliersPage';
 import PurchasesPage from './pages/PurchasesPage';
 import WastePage from './pages/WastePage';
 import PageErrorBoundary from './components/common/PageErrorBoundary';
+import AccountPage from './pages/AccountPage';
 
 const Guard = ({ roles, children }) => {
   const { user, loading } = useAuth();
@@ -29,7 +36,7 @@ const HomeRedirect = () => {
   if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'ADMIN') return <AnalyticsDashboard />;
   if (user.role === 'SELLER') return <Navigate to="/ventas" replace />;
-  return <Navigate to="/client" replace />;
+  return <Navigate to="/client/reservas" replace />;
 };
 
 export default function App() {
@@ -40,6 +47,7 @@ export default function App() {
         <Route path="/" element={<HomeRedirect />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/cuenta" element={<Guard><AccountPage /></Guard>} />
         <Route path="/admin" element={<Navigate to="/" replace />} />
         <Route path="/analytics" element={<Navigate to="/" replace />} />
         <Route path="/inventario" element={<Guard roles={["ADMIN"]}><StockDashboard /></Guard>} />
@@ -53,7 +61,15 @@ export default function App() {
         <Route path="/ventas" element={<Guard roles={["ADMIN", "SELLER"]}><SellerPOS /></Guard>} />
         <Route path="/ventas/historial" element={<Guard roles={["ADMIN", "SELLER"]}><SalesHistory /></Guard>} />
         <Route path="/clientes" element={<Guard roles={["ADMIN"]}><ClientsPage /></Guard>} />
-        <Route path="/client" element={<Guard roles={["CLIENT", "PARENT"]}><ClientPanel /></Guard>} />
+        <Route path="/client" element={<Guard roles={["CLIENT", "PARENT"]}><ClientPanel /></Guard>}>
+          <Route index element={<Navigate to="reservas" replace />} />
+          <Route path="reservas" element={<ClientReservationsPage />} />
+          <Route path="reservas/nueva" element={<NewReservationPage />} />
+          <Route path="productos" element={<Navigate to="/client/reservas/nueva" replace />} />
+          <Route path="saldo" element={<ClientBalancePage />} />
+          <Route path="movimientos" element={<ClientMovementsPage />} />
+          <Route path="notificaciones" element={<ClientNotificationsPage />} />
+        </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>

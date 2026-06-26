@@ -20,6 +20,14 @@ exports.googleSchema = Joi.object({
   linkClientId: Joi.string().guid({ version: ['uuidv4'] }).optional().allow('', null)
 });
 
+exports.changePasswordSchema = Joi.object({
+  currentPassword: Joi.string().optional().allow(''),
+  newPassword: Joi.string().min(6).required(),
+  confirmPassword: Joi.string().valid(Joi.ref('newPassword')).required().messages({
+    'any.only': 'Las contrasenas no coinciden'
+  })
+});
+
 exports.productSchema = Joi.object({
   name: Joi.string().required(),
   sku: Joi.string().optional().allow('', null),
@@ -106,6 +114,11 @@ exports.clientUpdateSchema = Joi.object({
   cardId: Joi.string().trim().optional().allow('', null),
   isActive: Joi.boolean().optional()
 }).min(1);
+
+exports.clientLinkUserSchema = Joi.object({
+  userId: Joi.string().guid({ version: ['uuidv4'] }).required(),
+  mergeClientId: Joi.string().guid({ version: ['uuidv4'] }).optional().allow('', null)
+});
 
 exports.saleStatusSchema = Joi.object({
   status: Joi.string().trim().uppercase().valid('PAID').required()

@@ -83,6 +83,20 @@ const ensureSchema = async () => {
     });
   }
 
+  if (!usersTable.mergedIntoClientId) {
+    await queryInterface.addColumn('Users', 'mergedIntoClientId', {
+      type: Sequelize.UUID,
+      allowNull: true
+    });
+  }
+
+  if (!usersTable.mergedAt) {
+    await queryInterface.addColumn('Users', 'mergedAt', {
+      type: Sequelize.DATE,
+      allowNull: true
+    });
+  }
+
   const accountMovementsTable = await queryInterface.describeTable('AccountMovements');
   if (!accountMovementsTable.balanceAfter) {
     await queryInterface.addColumn('AccountMovements', 'balanceAfter', {

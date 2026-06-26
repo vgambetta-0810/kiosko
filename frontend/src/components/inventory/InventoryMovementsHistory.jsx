@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+import MovementMobileFilters from '../movements/MovementMobileFilters';
+import MovementMobileList from '../movements/MovementMobileList';
 import { formatDateTime } from '../../utils/dateTime';
 
 const movementTypes = {
@@ -55,6 +57,7 @@ export default function InventoryMovementsHistory({
 
   return (
     <section className="card movement-history movement-history--standalone">
+      {/* Desktop filters — hidden on mobile via CSS */}
       <div className="movement-history__filters" aria-label="Filtros de movimientos">
         <label>
           Producto
@@ -91,10 +94,19 @@ export default function InventoryMovementsHistory({
         <button type="button" onClick={onClearFilters}>Limpiar filtros</button>
       </div>
 
+      {/* Mobile filters — hidden on desktop via CSS */}
+      <MovementMobileFilters
+        filters={filters}
+        products={products}
+        onFilterChange={onFilterChange}
+        onClearFilters={onClearFilters}
+      />
+
       <p className="movement-history__summary">
         {loading ? 'Cargando movimientos...' : `${visibleMovements.length} movimiento${visibleMovements.length === 1 ? '' : 's'}`}
       </p>
 
+      {/* Desktop table — hidden on mobile via CSS */}
       <div className="inventory-table-scroll">
         <table className="inventory-table inventory-table--compact movements-table">
           <thead>
@@ -151,6 +163,9 @@ export default function InventoryMovementsHistory({
           </tbody>
         </table>
       </div>
+
+      {/* Mobile card list — hidden on desktop via CSS */}
+      <MovementMobileList movements={visibleMovements} loading={loading} />
     </section>
   );
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LoaderCircle, Plus, RefreshCw, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import EntityDrawer from '../components/common/EntityDrawer';
+import KpiGrid from '../components/common/KpiGrid';
 import SupplierForm, { emptySupplier } from '../components/suppliers/SupplierForm';
 import SupplierList from '../components/suppliers/SupplierList';
 import SupplierProductLinks from '../components/suppliers/SupplierProductLinks';
@@ -173,12 +174,15 @@ export default function SuppliersPage() {
       </header>
       {error ? <p className="inventory-error">{error}</p> : null}
       {message ? <p className="inventory-success">{message}</p> : null}
-      <section className="suppliers-metrics">
-        <article><span>Proveedores activos</span><strong>{metrics.active}</strong></article>
-        <article><span>Proveedores inactivos</span><strong>{metrics.inactive}</strong></article>
-        <article><span>Productos con proveedor</span><strong>{metrics.withSupplier}</strong></article>
-        <article><span>Productos sin proveedor</span><strong>{metrics.withoutSupplier}</strong></article>
-      </section>
+      <KpiGrid
+        ariaLabel="Resumen de proveedores"
+        items={[
+          { label: 'Proveedores activos', value: metrics.active },
+          { label: 'Proveedores inactivos', value: metrics.inactive },
+          { label: 'Productos con proveedor', value: metrics.withSupplier },
+          { label: 'Productos sin proveedor', value: metrics.withoutSupplier },
+        ]}
+      />
       <div className="card suppliers-workspace">
         <section className="suppliers-panel">
           <div className="suppliers-panel__header">

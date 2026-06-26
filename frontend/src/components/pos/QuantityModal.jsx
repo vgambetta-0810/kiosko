@@ -19,40 +19,45 @@ function QuantityModal({ isOpen, product, onConfirm, onCancel, inputRef }) {
 
   if (!isOpen || !product) return null;
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleSubmit = (event) => {
+    event.preventDefault();
     if (!isPositiveInteger(quantity)) {
-      setError('Ingresá un número entero mayor a cero');
+      setError('Ingresa un numero entero mayor a cero');
+      return;
+    }
+    if (Number(quantity) > Number(product.stock || 0)) {
+      setError(`Stock insuficiente. Disponible: ${product.stock}`);
       return;
     }
     onConfirm(quantity);
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Escape') {
-      e.preventDefault();
+  const handleKeyDown = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
       onCancel();
     }
   };
 
   return (
     <div className="pos-modal-backdrop" role="presentation">
-      <div className="pos-modal" role="dialog" aria-modal="true" aria-labelledby="quantity-title" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="pos-modal" role="dialog" aria-modal="true" aria-labelledby="quantity-title" onMouseDown={(event) => event.stopPropagation()}>
         <h2 id="quantity-title">Cantidad</h2>
         <p className="pos-modal__product">{product.name}</p>
         <p className="pos-modal__meta">
-          Código de barras: {getProductCodeLabel(product)} · Stock: {product.stock}
+          Codigo de barras: {getProductCodeLabel(product)} - Precio: ${Number(product.price || 0).toFixed(2)} - Stock: {product.stock}
         </p>
         <form onSubmit={handleSubmit}>
           <input
             ref={inputRef}
             type="number"
             min="1"
+            max={product.stock}
             step="1"
             value={quantity}
-            onChange={(e) => {
-              if (!isUnsignedIntegerInput(e.target.value)) return;
-              setQuantity(e.target.value);
+            onChange={(event) => {
+              if (!isUnsignedIntegerInput(event.target.value)) return;
+              setQuantity(event.target.value);
               setError('');
             }}
             onKeyDown={(event) => {
@@ -62,7 +67,7 @@ function QuantityModal({ isOpen, product, onConfirm, onCancel, inputRef }) {
             className="pos-modal__qty-input"
             aria-label={`Cantidad para ${product.name}`}
           />
-          {error ? <small className="pos-error">{error}</small> : null}
+          {error ? <small className="pos-error" role="alert">{error}</small> : null}
           <div className="pos-modal__actions">
             <button type="submit">Agregar</button>
             <button type="button" onClick={onCancel} className="pos-modal__cancel">

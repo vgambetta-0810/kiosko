@@ -12,7 +12,9 @@ const User = sequelize.define('User', {
   role: { type: DataTypes.STRING, allowNull: false, defaultValue: 'CLIENT' },
   parentId: { type: DataTypes.UUID, allowNull: true },
   age: { type: DataTypes.INTEGER },
-  isActive: { type: DataTypes.BOOLEAN, defaultValue: true }
+  isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
+  mergedIntoClientId: { type: DataTypes.UUID, allowNull: true },
+  mergedAt: { type: DataTypes.DATE, allowNull: true }
 });
 
 const Product = sequelize.define('Product', {
@@ -175,6 +177,16 @@ const AccountMovement = sequelize.define('AccountMovement', {
   notes: { type: DataTypes.STRING }
 });
 
+const ClientMergeAudit = sequelize.define('ClientMergeAudit', {
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+  adminId: { type: DataTypes.UUID, allowNull: false },
+  finalClientId: { type: DataTypes.UUID, allowNull: false },
+  linkedUserId: { type: DataTypes.UUID, allowNull: false },
+  mergedClientId: { type: DataTypes.UUID, allowNull: true },
+  action: { type: DataTypes.STRING, allowNull: false, defaultValue: 'LINK_USER' },
+  snapshot: { type: DataTypes.JSON, allowNull: true }
+});
+
 User.belongsTo(User, { as: 'parent', foreignKey: 'parentId' });
 Product.belongsTo(Category, { as: 'categoryEntity', foreignKey: 'categoryId' });
 StockMovement.belongsTo(Product, { as: 'product', foreignKey: 'productId' });
@@ -197,6 +209,10 @@ StockMovement.belongsTo(Supplier, { as: 'supplier', foreignKey: 'supplierId' });
 Reservation.belongsTo(User, { as: 'client', foreignKey: 'clientId' });
 AccountMovement.belongsTo(Account, { as: 'account', foreignKey: 'accountId' });
 AccountMovement.belongsTo(User, { as: 'createdBy', foreignKey: 'createdById' });
+ClientMergeAudit.belongsTo(User, { as: 'admin', foreignKey: 'adminId' });
+ClientMergeAudit.belongsTo(User, { as: 'finalClient', foreignKey: 'finalClientId' });
+ClientMergeAudit.belongsTo(User, { as: 'linkedUser', foreignKey: 'linkedUserId' });
+ClientMergeAudit.belongsTo(User, { as: 'mergedClient', foreignKey: 'mergedClientId' });
 
 module.exports = {
   Op,
@@ -214,5 +230,6 @@ module.exports = {
   ProductSupplier,
   Reservation,
   Account,
-  AccountMovement
+  AccountMovement,
+  ClientMergeAudit
 };

@@ -38,7 +38,7 @@ const getRange = ({ preset, dateFrom, dateTo }) => {
 
   if (preset === 'month') {
     const from = new Date(now);
-    from.setDate(now.getDate() - 29);
+    from.setDate(now.getDate() - 30);
     return { from: startOfDay(from), to: endOfDay(now) };
   }
 

@@ -4,10 +4,29 @@ const reservationService = require('../services/reservation.service');
 
 exports.list = asyncHandler(async (req, res) => {
   const [clients, summary] = await Promise.all([
-    clientService.listClients({ q: req.query.q }),
+    clientService.listClients({ q: req.query.q, identityStatus: req.query.identityStatus }),
     clientService.getSummary()
   ]);
   res.json({ clients, summary });
+});
+
+exports.unlinkedUsers = asyncHandler(async (req, res) => {
+  res.json(await clientService.listUnlinkedUsers({ q: req.query.q }));
+});
+
+exports.linkCandidates = asyncHandler(async (req, res) => {
+  res.json(await clientService.getLinkCandidates({ clientId: req.params.id, q: req.query.q }));
+});
+
+exports.linkUser = asyncHandler(async (req, res) => {
+  res.json(
+    await clientService.linkUserAccount({
+      clientId: req.params.id,
+      userId: req.body.userId,
+      mergeClientId: req.body.mergeClientId,
+      adminId: req.user.id
+    })
+  );
 });
 
 exports.create = asyncHandler(async (req, res) => {

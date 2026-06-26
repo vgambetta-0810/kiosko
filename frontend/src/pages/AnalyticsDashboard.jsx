@@ -21,7 +21,7 @@ const getPresetRange = (preset) => {
   const from = new Date(now);
 
   if (preset === 'week') from.setDate(now.getDate() - 6);
-  if (preset === 'month') from.setDate(now.getDate() - 29);
+  if (preset === 'month') from.setDate(now.getDate() - 30);
 
   return {
     dateFrom: formatDateInput(from),
@@ -29,7 +29,8 @@ const getPresetRange = (preset) => {
   };
 };
 
-const createInitialFilters = () => ({ preset: 'today', ...getPresetRange('today'), sellerId: '', clientId: '' });
+const DEFAULT_PRESET = 'month';
+const createInitialFilters = () => ({ preset: DEFAULT_PRESET, ...getPresetRange(DEFAULT_PRESET), sellerId: '', clientId: '' });
 const presetSummaryLabels = {
   today: 'Hoy',
   week: 'Semana actual',
@@ -170,7 +171,10 @@ export default function AnalyticsDashboard() {
         {data ? (
           <>
             {noResults && !refreshing ? (
-              <p className="inventory-table__empty">No hay resultados para los filtros seleccionados.</p>
+              <p className="analytics-no-results" role="status">
+                <span aria-hidden="true">⚠</span>
+                No hay resultados para los filtros seleccionados.
+              </p>
             ) : null}
 
             <DashboardSummary periodLabel={periodLabel} kpis={kpis} />

@@ -3,17 +3,21 @@ const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const { Op, Supplier, Product, ProductSupplier } = require('../models');
 
-const normalizeName = (value) => String(value || '').trim().toLocaleLowerCase('es');
+const normalizeName = (value) => String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase('es');
 const cleanOptional = (value) => {
-  const cleaned = String(value || '').trim();
+  const cleaned = String(value || '').trim().replace(/\s+/g, ' ');
+  return cleaned || null;
+};
+const cleanCuit = (value) => {
+  const cleaned = String(value || '').replace(/\D/g, '');
   return cleaned || null;
 };
 
 const supplierPayload = (body) => ({
-  name: String(body.name || '').trim(),
+  name: String(body.name || '').trim().replace(/\s+/g, ' '),
   normalizedName: normalizeName(body.name),
   businessName: cleanOptional(body.businessName),
-  cuit: cleanOptional(body.cuit),
+  cuit: cleanCuit(body.cuit),
   email: cleanOptional(body.email),
   phone: cleanOptional(body.phone),
   address: cleanOptional(body.address),
@@ -21,18 +25,19 @@ const supplierPayload = (body) => ({
   ...(body.isActive !== undefined ? { isActive: Boolean(body.isActive) } : {})
 });
 
-const ensureUnique = async ({ name, cuit, excludedId }) => {
-  const conflict = await Supplier.findOne({
-    where: {
-      ...(excludedId ? { id: { [Op.ne]: excludedId } } : {}),
-      [Op.or]: [
-        { normalizedName: normalizeName(name) },
-        ...(cleanOptional(cuit) ? [{ cuit: cleanOptional(cuit) }] : [])
-      ]
-    }
+const ensureUnique = async ({ name, businessName, cuit, excludedId }) => {
+  const candidates = new Set([normalizeName(name), normalizeName(businessName)].filter(Boolean));
+  const normalizedCuit = cleanCuit(cuit);
+  const suppliers = await Supplier.findAll({
+    where: excludedId ? { id: { [Op.ne]: excludedId } } : undefined
   });
+  const conflict = suppliers.find((supplier) => (
+    (normalizedCuit && cleanCuit(supplier.cuit) === normalizedCuit)
+    || candidates.has(normalizeName(supplier.name))
+    || candidates.has(normalizeName(supplier.businessName))
+  ));
   if (!conflict) return;
-  if (cleanOptional(cuit) && conflict.cuit === cleanOptional(cuit)) throw new ApiError(409, 'El CUIT ya está registrado');
+  if (normalizedCuit && cleanCuit(conflict.cuit) === normalizedCuit) throw new ApiError(409, 'El CUIT ya está registrado');
   throw new ApiError(409, 'Ya existe un proveedor con ese nombre');
 };
 
@@ -42,17 +47,26 @@ exports.create = asyncHandler(async (req, res) => {
 });
 
 exports.list = asyncHandler(async (req, res) => {
-  const q = String(req.query.q || '').trim();
+  const q = String(req.query.search || req.query.q || '').trim();
+  const qLower = q.toLowerCase();
+  const qCuit = cleanCuit(q);
+  const activeFilter = req.query.active;
   const suppliers = await Supplier.findAll({
-    where: q
-      ? {
-          [Op.or]: [
-            where(fn('lower', col('name')), { [Op.like]: `%${q.toLowerCase()}%` }),
-            { businessName: { [Op.like]: `%${q}%` } },
-            { cuit: { [Op.like]: `%${q}%` } }
-          ]
-        }
-      : undefined,
+    where: {
+      ...(activeFilter !== undefined ? { isActive: activeFilter !== 'false' } : {}),
+      ...(q
+        ? {
+            [Op.or]: [
+              where(fn('lower', col('name')), { [Op.like]: `%${qLower}%` }),
+              where(fn('lower', col('businessName')), { [Op.like]: `%${qLower}%` }),
+              where(fn('lower', col('email')), { [Op.like]: `%${qLower}%` }),
+              where(fn('lower', col('phone')), { [Op.like]: `%${qLower}%` }),
+              { cuit: { [Op.like]: `%${q}%` } },
+              ...(qCuit ? [{ cuit: { [Op.like]: `%${qCuit}%` } }] : [])
+            ]
+          }
+        : {})
+    },
     order: [['name', 'ASC']]
   });
   res.json(suppliers);
@@ -62,7 +76,7 @@ exports.update = asyncHandler(async (req, res) => {
   const supplier = await Supplier.findByPk(req.params.id);
   if (!supplier) throw new ApiError(404, 'Proveedor no encontrado');
   const next = { ...supplier.toJSON(), ...req.body };
-  await ensureUnique({ name: next.name, cuit: next.cuit, excludedId: supplier.id });
+  await ensureUnique({ name: next.name, businessName: next.businessName, cuit: next.cuit, excludedId: supplier.id });
   await supplier.update(supplierPayload(next));
   res.json(supplier);
 });

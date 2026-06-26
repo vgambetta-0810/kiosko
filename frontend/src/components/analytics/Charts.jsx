@@ -37,8 +37,9 @@ const useChartTheme = () => {
 };
 
 function ChartPanel({ title, children, isEmpty, className = '' }) {
+  const emptyClass = isEmpty ? ' analytics-chart-panel--empty' : '';
   return (
-    <article className={`analytics-chart-panel ${className}`.trim()}>
+    <article className={`analytics-chart-panel${emptyClass} ${className}`.trim()}>
       <h3>{title}</h3>
       {isEmpty ? <p className="analytics-empty-state">Sin datos en el rango seleccionado.</p> : children}
     </article>

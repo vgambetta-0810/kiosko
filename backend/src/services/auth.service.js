@@ -11,8 +11,29 @@ const { withTransaction } = require('./stock.service');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const isInternalClientEmail = (email = '') => email.endsWith('@clientes.local');
+const hasAccessAccount = (user) => Boolean(user?.password || user?.googleId);
 
-const buildAuthPayload = (user) => ({ user, token: signToken({ sub: user.id, role: user.role }) });
+const toPublicUser = (user) => {
+  const raw = user?.toJSON ? user.toJSON() : user;
+  if (!raw) return null;
+  return {
+    id: raw.id,
+    name: raw.name,
+    email: raw.email,
+    phone: raw.phone,
+    cardId: raw.cardId,
+    role: raw.role,
+    parentId: raw.parentId,
+    age: raw.age,
+    isActive: raw.isActive,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+    hasPassword: Boolean(raw.password),
+    hasGoogle: Boolean(raw.googleId)
+  };
+};
+
+const buildAuthPayload = (user) => ({ user: toPublicUser(user), token: signToken({ sub: user.id, role: user.role }) });
 
 const findExistingEmailOwner = async (email, transaction) =>
   User.findOne({ where: { email }, transaction });
@@ -98,7 +119,7 @@ exports.register = async ({ name, email, password, role, age, parent, linkClient
 
   const existing = await User.findOne({ where: { email: normalizedEmail } });
   if (existing) {
-    if (existing.role === 'CLIENT' && isInternalClientEmail(existing.email)) {
+    if (existing.role === 'CLIENT' && (isInternalClientEmail(existing.email) || !hasAccessAccount(existing))) {
       const user = await withTransaction((transaction) =>
         completeClientRegistration({ clientId: existing.id, name, email: normalizedEmail, passwordHash: hash, transaction })
       );
@@ -154,6 +175,12 @@ exports.loginWithGoogleToken = async ({ idToken, linkClientId }) => {
 
   let user = await User.findOne({ where: { [Op.or]: [{ googleId }, { email: normalizedEmail }] } });
   if (user) {
+    if (user.role === 'CLIENT' && !hasAccessAccount(user)) {
+      user = await withTransaction((transaction) =>
+        completeClientRegistration({ clientId: user.id, name, email: normalizedEmail, googleId, transaction })
+      );
+      return buildAuthPayload(user);
+    }
     if (!user.googleId) await user.update({ googleId });
     return buildAuthPayload(user);
   }
@@ -171,4 +198,17 @@ exports.loginWithGoogleToken = async ({ idToken, linkClientId }) => {
   return buildAuthPayload(user);
 };
 
+exports.changePassword = async ({ userId, currentPassword = '', newPassword }) => {
+  const user = await User.findByPk(userId);
+  if (!user || !user.isActive) throw new ApiError(404, 'Usuario no encontrado');
+  if (user.password) {
+    const ok = await bcrypt.compare(currentPassword, user.password);
+    if (!ok) throw new ApiError(401, 'La contrasena actual no es correcta');
+  }
+  user.password = await bcrypt.hash(newPassword, 10);
+  await user.save();
+  return toPublicUser(user);
+};
+
+exports.toPublicUser = toPublicUser;
 exports.passport = passport;

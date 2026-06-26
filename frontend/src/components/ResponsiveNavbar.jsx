@@ -3,6 +3,7 @@ import { Menu, Moon, Sun, X } from 'lucide-react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import UserMenu from './UserMenu';
 
 const buildNavLinks = (role) => {
   const links = [{ to: '/', label: 'Inicio' }];
@@ -24,14 +25,19 @@ const buildNavLinks = (role) => {
   }
 
   if (role === 'CLIENT' || role === 'PARENT') {
-    links.push({ to: '/client', label: 'Panel' });
+    links.push(
+      { to: '/client/reservas', label: 'Reservas' },
+      { to: '/client/saldo', label: 'Saldo / Tarjeta' },
+      { to: '/client/movimientos', label: 'Movimientos' },
+      { to: '/client/notificaciones', label: 'Notificaciones' }
+    );
   }
 
   return links;
 };
 
 export default function ResponsiveNavbar() {
-  const { user, logout } = useAuth();
+  const { logout, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
@@ -65,12 +71,6 @@ export default function ResponsiveNavbar() {
 
   if (!user || isAuthRoute) return null;
 
-  const handleLogout = () => {
-    setIsMenuOpen(false);
-    logout();
-    navigate('/login', { replace: true });
-  };
-
   const renderLinks = (variant) =>
     links.map((link, index) => (
       <NavLink
@@ -98,6 +98,12 @@ export default function ResponsiveNavbar() {
     </button>
   );
 
+  const handleLogout = () => {
+    setIsMenuOpen(false);
+    logout();
+    navigate('/login', { replace: true });
+  };
+
   return (
     <>
       <nav className="top-nav" aria-label="Navegacion principal">
@@ -108,10 +114,8 @@ export default function ResponsiveNavbar() {
         </div>
 
         <div className="top-nav__actions top-nav__actions--desktop">
+          <UserMenu variant="desktop" />
           {renderThemeToggle('desktop')}
-          <button type="button" className="logout-btn logout-btn--desktop" onClick={handleLogout}>
-            Cerrar sesion
-          </button>
         </div>
 
         <button
@@ -149,11 +153,15 @@ export default function ResponsiveNavbar() {
             </button>
           </div>
           <div className="top-nav__links top-nav__links--mobile">
-            {renderLinks('mobile')}
-            {renderThemeToggle('mobile')}
-            <button type="button" className="logout-btn logout-btn--mobile" onClick={handleLogout}>
-              Cerrar sesion
-            </button>
+            <nav className="top-nav__mobile-nav" aria-label="Secciones principales">
+              {renderLinks('mobile')}
+            </nav>
+            <div className="top-nav__mobile-actions" aria-label="Preferencias y sesion">
+              {renderThemeToggle('mobile')}
+              <button type="button" className="logout-btn logout-btn--mobile" onClick={handleLogout}>
+                Cerrar sesion
+              </button>
+            </div>
           </div>
         </div>
       </div>

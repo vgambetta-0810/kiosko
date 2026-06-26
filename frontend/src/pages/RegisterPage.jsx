@@ -26,7 +26,7 @@ export default function RegisterPage() {
   const routeByRole = (userRole) => {
     if (userRole === 'ADMIN') return '/';
     if (userRole === 'SELLER') return '/ventas';
-    return '/client';
+    return '/client/reservas';
   };
 
   const validateForm = () => {

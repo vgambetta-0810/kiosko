@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LoaderCircle, Plus, RefreshCw, Search } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import EntityDrawer from '../components/common/EntityDrawer';
+import KpiGrid from '../components/common/KpiGrid';
 import PurchaseDetail from '../components/purchases/PurchaseDetail';
 import PurchaseForm, { emptyPurchase } from '../components/purchases/PurchaseForm';
 import PurchaseList from '../components/purchases/PurchaseList';
@@ -15,6 +16,10 @@ export default function PurchasesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedSupplierId = searchParams.get('supplierId') || '';
   const [suppliers, setSuppliers] = useState([]);
+  const [supplierOptions, setSupplierOptions] = useState([]);
+  const [supplierSearchLoading, setSupplierSearchLoading] = useState(false);
+  const [supplierSearchError, setSupplierSearchError] = useState('');
+  const [supplierText, setSupplierText] = useState('');
   const [products, setProducts] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [supplierLinks, setSupplierLinks] = useState([]);
@@ -27,6 +32,7 @@ export default function PurchasesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const supplierSearchRequest = useRef(0);
 
   const showMessage = (text) => {
     setMessage(text);
@@ -42,7 +48,9 @@ export default function PurchasesPage() {
         api.get('/products'),
         api.get('/purchases')
       ]);
-      setSuppliers(supplierResponse.data || []);
+      const nextSuppliers = supplierResponse.data || [];
+      setSuppliers(nextSuppliers);
+      setSupplierOptions(nextSuppliers.filter((supplier) => supplier.isActive));
       setProducts(productResponse.data || []);
       setPurchases(purchaseResponse.data || []);
     } catch (requestError) {
@@ -106,9 +114,30 @@ export default function PurchasesPage() {
     return suggestedA - suggestedB || a.name.localeCompare(b.name);
   });
 
+  const searchSuppliers = useCallback(async (search = '') => {
+    const requestId = ++supplierSearchRequest.current;
+    setSupplierSearchLoading(true);
+    setSupplierSearchError('');
+    try {
+      const { data } = await api.get('/suppliers', { params: { search, active: true } });
+      if (requestId !== supplierSearchRequest.current) return;
+      setSupplierOptions(data || []);
+    } catch (requestError) {
+      if (requestId !== supplierSearchRequest.current) return;
+      setSupplierSearchError(requestError?.response?.data?.message || 'No se pudieron buscar proveedores');
+    } finally {
+      if (requestId === supplierSearchRequest.current) setSupplierSearchLoading(false);
+    }
+  }, []);
+
+  const upsertSupplier = (supplier) => {
+    setSuppliers((current) => [supplier, ...current.filter((item) => item.id !== supplier.id)]);
+    setSupplierOptions((current) => [supplier, ...current.filter((item) => item.id !== supplier.id)]);
+  };
+
   const openPurchase = (supplierId = requestedSupplierId) => {
-    const fallbackId = suppliers.find((supplier) => supplier.isActive)?.id || '';
-    setPurchaseForm(emptyPurchase(supplierId || fallbackId));
+    setSupplierText('');
+    setPurchaseForm(emptyPurchase(supplierId || ''));
     setDrawer('form');
   };
 
@@ -131,7 +160,12 @@ export default function PurchasesPage() {
   };
 
   const savePurchase = async (confirm) => {
-    if (!purchaseForm.supplierId || !purchaseForm.items.length) return setError('Seleccioná un proveedor y agregá al menos un producto');
+    if (!purchaseForm.supplierId) {
+      return setError(supplierText.trim()
+        ? 'Seleccioná un proveedor existente o creá uno nuevo.'
+        : 'Seleccioná un proveedor para continuar');
+    }
+    if (!purchaseForm.items.length) return setError('Agregá al menos un producto');
     if (purchaseForm.items.some((item) => !isPositiveInteger(item.quantity))) {
       return setError('Las cantidades deben ser números enteros mayores a cero');
     }
@@ -183,12 +217,15 @@ export default function PurchasesPage() {
       </header>
       {error ? <p className="inventory-error">{error}</p> : null}
       {message ? <p className="inventory-success">{message}</p> : null}
-      <section className="suppliers-metrics">
-        <article><span>Compras del mes</span><strong>{metrics.month}</strong></article>
-        <article><span>Total comprado</span><strong>{money.format(metrics.total)}</strong></article>
-        <article><span>Compras pendientes</span><strong>{metrics.draft}</strong></article>
-        <article><span>Compras confirmadas</span><strong>{metrics.confirmed}</strong></article>
-      </section>
+      <KpiGrid
+        ariaLabel="Resumen de compras"
+        items={[
+          { label: 'Compras del mes', value: metrics.month },
+          { label: 'Total comprado', value: money.format(metrics.total) },
+          { label: 'Compras pendientes', value: metrics.draft },
+          { label: 'Compras confirmadas', value: metrics.confirmed },
+        ]}
+      />
       <div className="card suppliers-workspace">
         <section className="suppliers-panel">
           <div className="purchase-filters">
@@ -220,12 +257,18 @@ export default function PurchasesPage() {
           <PurchaseForm
             value={purchaseForm}
             suppliers={suppliers}
+            supplierOptions={supplierOptions}
+            supplierLoading={supplierSearchLoading}
+            supplierError={supplierSearchError}
             products={sortedProducts}
             suggestedProductIds={suggestedProductIds}
             saving={saving}
             money={money}
             onChange={setPurchaseForm}
+            onSupplierSearch={searchSuppliers}
             onSupplierChange={(supplierId) => setPurchaseForm((current) => ({ ...current, supplierId }))}
+            onSupplierCreated={upsertSupplier}
+            onSupplierTextChange={setSupplierText}
             onAddItem={addPurchaseItem}
             onUpdateItem={updatePurchaseItem}
             onRemoveItem={(index) => setPurchaseForm((current) => ({ ...current, items: current.items.filter((_, itemIndex) => itemIndex !== index) }))}

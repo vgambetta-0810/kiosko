@@ -134,7 +134,7 @@ export default function WastePage() {
   };
 
   return (
-    <div className="page waste-page">
+    <div className="page suppliers-page waste-page">
       <header className="waste-header">
         <div>
           <p className="inventory-kicker">Control de pérdidas</p>

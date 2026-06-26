@@ -1,28 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import CheckoutStep from '../components/pos/CheckoutStep';
+import ProductSearchModal from '../components/pos/ProductSearchModal';
 import QuantityModal from '../components/pos/QuantityModal';
 import SalesTable from '../components/pos/SalesTable';
 import BarcodeInput from '../components/pos/BarcodeInput';
 import usePosKeyboard from '../hooks/usePosKeyboard';
 import { api } from '../services/api';
-import { getProductCodeLabel } from '../utils/products';
 import { isPositiveInteger } from '../utils/quantity';
-
-const PRODUCT_LIMIT = 15;
 
 const getEntityId = (entity) => entity?.id || entity?._id;
 
 const normalizeScanValue = (value) => String(value || '').trim().toUpperCase();
-
-const productMatchesQuery = (product, query) => {
-  const normalizedQuery = normalizeScanValue(query);
-  if (!normalizedQuery) return true;
-
-  return [product.name, product.sku, product.codigoBarras, getEntityId(product)]
-    .filter(Boolean)
-    .some((value) => normalizeScanValue(value).includes(normalizedQuery));
-};
 
 const productMatchesExactCode = (product, query) => {
   const normalizedQuery = normalizeScanValue(query);
@@ -46,6 +35,7 @@ export default function SellerPOS() {
   const [clientId, setClientId] = useState('');
   const [step, setStep] = useState('items');
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [isProductSearchOpen, setIsProductSearchOpen] = useState(false);
   const [highlightedProductId, setHighlightedProductId] = useState('');
   const [loading, setLoading] = useState(false);
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -60,6 +50,7 @@ export default function SellerPOS() {
   const submitLockRef = useRef(false);
 
   const isQuantityModalOpen = Boolean(selectedProduct);
+  const isAnyModalOpen = isQuantityModalOpen || isProductSearchOpen;
 
   const focusBarcode = useCallback(() => {
     window.requestAnimationFrame(() => {
@@ -86,7 +77,7 @@ export default function SellerPOS() {
         setPaymentMethods(paymentMethodsRes.data || []);
         setSaleTypes(saleTypesRes.data || []);
       } catch (error) {
-        const loadError = error?.response?.data?.message || 'No se pudo cargar la información de ventas';
+        const loadError = error?.response?.data?.message || 'No se pudo cargar la informacion de ventas';
         setMessage(loadError);
         setOptionsError(loadError);
         setClientsError(loadError);
@@ -103,18 +94,14 @@ export default function SellerPOS() {
   }, [focusBarcode]);
 
   useEffect(() => {
-    if (!isQuantityModalOpen && step === 'items') focusBarcode();
-  }, [focusBarcode, isQuantityModalOpen, step]);
+    if (!isAnyModalOpen && step === 'items') focusBarcode();
+  }, [focusBarcode, isAnyModalOpen, step]);
 
   useEffect(() => {
     return () => {
       if (highlightTimerRef.current) window.clearTimeout(highlightTimerRef.current);
     };
   }, []);
-
-  const filteredProducts = useMemo(() => {
-    return products.filter((product) => productMatchesQuery(product, barcodeQuery)).slice(0, PRODUCT_LIMIT);
-  }, [barcodeQuery, products]);
 
   const subtotal = useMemo(() => cart.reduce((acc, item) => acc + item.quantity * item.price, 0), [cart]);
   const safeDiscount = Number(discount) > subtotal ? subtotal : Number(discount) || 0;
@@ -136,6 +123,25 @@ export default function SellerPOS() {
     setBarcodeQuery('');
   }, []);
 
+  const openProductSearch = useCallback(() => {
+    if (step !== 'items' || loading) return;
+    setMessage('');
+    setIsProductSearchOpen(true);
+  }, [loading, step]);
+
+  const closeProductSearch = useCallback(() => {
+    setIsProductSearchOpen(false);
+    focusBarcode();
+  }, [focusBarcode]);
+
+  const selectProductFromSearch = useCallback(
+    (product) => {
+      setIsProductSearchOpen(false);
+      openQuantityModal(product);
+    },
+    [openQuantityModal]
+  );
+
   const resolveProductByQuery = useCallback(
     async (query) => {
       const exactLocal = products.find((product) => productMatchesExactCode(product, query));
@@ -155,7 +161,7 @@ export default function SellerPOS() {
 
   const goCheckout = useCallback(() => {
     if (!cart.length) {
-      setMessage('Cargá al menos un producto');
+      setMessage('Carga al menos un producto');
       focusBarcode();
       return;
     }
@@ -180,7 +186,7 @@ export default function SellerPOS() {
       try {
         const product = await resolveProductByQuery(query);
         if (!product) {
-          setMessage('Producto no encontrado o búsqueda ambigua');
+          setMessage('Producto no encontrado o busqueda ambigua');
           focusBarcode();
           return;
         }
@@ -195,34 +201,41 @@ export default function SellerPOS() {
     [barcodeQuery, focusBarcode, goCheckout, openQuantityModal, resolveProductByQuery]
   );
 
+  useEffect(() => {
+    if (step !== 'items') return undefined;
+
+    const handleKeyDown = (event) => {
+      if (event.key !== 'F1') return;
+      if (isAnyModalOpen || loading) return;
+      event.preventDefault();
+      openProductSearch();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isAnyModalOpen, loading, openProductSearch, step]);
+
   const addQuantityToCart = useCallback(
     (quantityValue) => {
       const quantity = Number(quantityValue);
       const productId = getEntityId(selectedProduct);
 
       if (!selectedProduct || !productId || !isPositiveInteger(quantityValue)) {
-        setMessage('La cantidad debe ser un número entero mayor a cero');
+        setMessage('La cantidad debe ser un numero entero mayor a cero');
+        return;
+      }
+
+      const found = cart.find((item) => item.productId === productId);
+      const nextQuantity = (found?.quantity || 0) + quantity;
+      if (nextQuantity > Number(selectedProduct.stock || 0)) {
+        setMessage(`Stock insuficiente. Disponible: ${selectedProduct.stock}`);
         return;
       }
 
       setCart((prev) => {
-        const found = prev.find((item) => item.productId === productId);
-
         if (found) {
-          const nextQuantity = found.quantity + quantity;
-          if (nextQuantity > Number(selectedProduct.stock || 0)) {
-            setMessage(`Stock insuficiente. Disponible: ${selectedProduct.stock}`);
-            return prev;
-          }
-
           return prev.map((item) => (item.productId === productId ? { ...item, quantity: nextQuantity } : item));
         }
-
-        if (quantity > Number(selectedProduct.stock || 0)) {
-          setMessage(`Stock insuficiente. Disponible: ${selectedProduct.stock}`);
-          return prev;
-        }
-
         return [
           ...prev,
           {
@@ -240,13 +253,13 @@ export default function SellerPOS() {
       flashUpdatedRow(productId);
       closeQuantityModal();
     },
-    [closeQuantityModal, flashUpdatedRow, selectedProduct]
+    [cart, closeQuantityModal, flashUpdatedRow, selectedProduct]
   );
 
   const updateQty = useCallback((productId, quantityValue) => {
     const quantity = Number(quantityValue);
     if (!isPositiveInteger(quantityValue)) {
-      setMessage('La cantidad debe ser un número entero mayor a cero');
+      setMessage('La cantidad debe ser un numero entero mayor a cero');
       return;
     }
 
@@ -292,16 +305,16 @@ export default function SellerPOS() {
   const submitSale = useCallback(async () => {
     if (submitLockRef.current) return;
     if (!cart.length) {
-      setMessage('Cargá al menos un producto');
+      setMessage('Carga al menos un producto');
       return;
     }
     if (!paymentMethod) {
-      setMessage('Seleccioná un método de pago');
+      setMessage('Selecciona un metodo de pago');
       return;
     }
     const selectedSaleType = saleTypes.find((option) => option.code === status);
     if (!selectedSaleType) {
-      setMessage('Seleccioná un tipo de venta');
+      setMessage('Selecciona un tipo de venta');
       return;
     }
     if (selectedSaleType.requiresClient && !clientId) {
@@ -343,12 +356,12 @@ export default function SellerPOS() {
   }, [cart, clientId, focusBarcode, paymentMethod, safeDiscount, saleTypes, status]);
 
   usePosKeyboard({
-    isModalOpen: isQuantityModalOpen,
-    onEscape: closeQuantityModal,
+    isModalOpen: isAnyModalOpen,
+    onEscape: isProductSearchOpen ? closeProductSearch : closeQuantityModal,
     onFocusBarcode: focusBarcode,
     onGoCheckout: goCheckout,
     onFinalize: submitSale,
-    canGoCheckout: step === 'items' && cart.length > 0,
+    canGoCheckout: step === 'items' && cart.length > 0 && !isProductSearchOpen,
     canFinalize: step === 'checkout' && cart.length > 0 && !loading
   });
 
@@ -378,21 +391,11 @@ export default function SellerPOS() {
                 value={barcodeQuery}
                 onChange={setBarcodeQuery}
                 onSubmit={handleBarcodeSubmit}
+                onOpenSearch={openProductSearch}
                 inputRef={barcodeInputRef}
                 disabled={lookupLoading || loading}
                 loading={lookupLoading}
               />
-
-              <div className="pos-product-list">
-                {filteredProducts.map((product) => (
-                  <button key={getEntityId(product)} type="button" onClick={() => openQuantityModal(product)}>
-                    <span>{product.name}</span>
-                    <small>
-                      {getProductCodeLabel(product)} · ${Number(product.price).toFixed(2)} · Stock {product.stock}
-                    </small>
-                  </button>
-                ))}
-              </div>
             </section>
 
             <SalesTable items={cart} highlightedProductId={highlightedProductId} onUpdateQty={updateQty} onRemove={removeItem} />
@@ -444,6 +447,12 @@ export default function SellerPOS() {
         inputRef={quantityInputRef}
         onConfirm={addQuantityToCart}
         onCancel={closeQuantityModal}
+      />
+      <ProductSearchModal
+        isOpen={isProductSearchOpen}
+        products={products}
+        onClose={closeProductSearch}
+        onSelect={selectProductFromSearch}
       />
     </div>
   );

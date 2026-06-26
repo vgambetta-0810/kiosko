@@ -1,14 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Bell, LoaderCircle, PackageCheck, RefreshCw, Search, TicketCheck } from 'lucide-react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Bell, LoaderCircle, PackagePlus, RefreshCw, Search, TicketCheck } from 'lucide-react';
 import { api } from '../services/api';
 import { blockNonIntegerKeys, isPositiveInteger, isUnsignedIntegerInput } from '../utils/quantity';
 
-const tabs = [
-  { key: 'reservations', label: 'Reservas' },
-  { key: 'products', label: 'Productos' },
-  { key: 'balance', label: 'Saldo / Tarjeta' },
-  { key: 'notifications', label: 'Notificaciones' }
-];
+const ClientPanelContext = createContext(null);
 
 const statusLabels = {
   ACTIVE: 'Activa',
@@ -26,7 +22,12 @@ const statusLabels = {
   PAYMENT: 'Pago',
   DEBT: 'Deuda',
   DEDUCTION: 'Descuento',
-  ADJUSTMENT: 'Ajuste'
+  ADJUSTMENT: 'Ajuste',
+  RESERVATION_CREATED: 'Reserva creada',
+  RESERVATION_CANCELLED: 'Reserva cancelada',
+  RESERVATION_RETIRED: 'Reserva retirada',
+  RESERVATION_EXPIRED: 'Reserva vencida',
+  RESERVATION_RETURNED: 'Reserva devuelta'
 };
 
 const moneyFormatter = new Intl.NumberFormat('es-AR', {
@@ -43,6 +44,7 @@ const dateFormatter = new Intl.DateTimeFormat('es-AR', {
 const sumReservationItems = (reservation) => (reservation.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 const reservationProducts = (reservation) => (reservation.items || []).map((item) => item.product?.name || 'Producto').join(', ');
 const normalize = (value) => String(value || '').trim().toLocaleLowerCase('es');
+const isReservationCancellable = (reservation) => ['ACTIVE', 'PENDING', 'PENDIENTE'].includes(String(reservation.status || '').toUpperCase());
 const movementDelta = (movement) => {
   if (movement.delta !== null && movement.delta !== undefined) return Number(movement.delta);
   return ['PAYMENT', 'CONSUMPTION', 'DEDUCTION'].includes(movement.type)
@@ -50,24 +52,518 @@ const movementDelta = (movement) => {
     : Number(movement.amount || 0);
 };
 
-function Drawer({ title, children, onClose }) {
+const isConsumptionMovement = (movement) => ['CONSUMPTION', 'PAYMENT', 'DEDUCTION', 'DEBT'].includes(movement.type);
+
+function useClientPanel() {
+  const context = useContext(ClientPanelContext);
+  if (!context) throw new Error('useClientPanel debe usarse dentro de ClientPanel');
+  return context;
+}
+
+function ClientSummaryCards() {
+  const { activeReservations, dashboard, notifications, productHistory, visibleBalance } = useClientPanel();
+  const summary = dashboard.summary || {};
+  const unreadNotifications = notifications.filter((notification) => !notification.read).length;
+
   return (
-    <div className="client-drawer-backdrop" role="presentation" onMouseDown={onClose}>
-      <aside className="client-drawer" role="dialog" aria-modal="true" aria-label={title} onMouseDown={(event) => event.stopPropagation()}>
-        <header className="client-drawer__header">
-          <h2>{title}</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar">
-            X
-          </button>
-        </header>
-        {children}
-      </aside>
+    <section className="clients-metrics" aria-label="Resumen de mi cuenta">
+      <article className="clients-metric clients-metric--money">
+        <span>Saldo disponible</span>
+        <strong>{moneyFormatter.format(visibleBalance)}</strong>
+      </article>
+      <article className="clients-metric">
+        <span>Reservas activas</span>
+        <strong>{activeReservations || summary.activeReservations || 0}</strong>
+      </article>
+      <article className="clients-metric clients-metric--balance">
+        <span>Productos comprados/reservados</span>
+        <strong>{productHistory.length || summary.productRecords || 0}</strong>
+      </article>
+      <article className="clients-metric">
+        <span>Notificaciones pendientes</span>
+        <strong>{unreadNotifications || summary.unreadNotifications || 0}</strong>
+      </article>
+    </section>
+  );
+}
+
+function ClientReservationHistory() {
+  const { cancelReservation, loading, reservations, saving } = useClientPanel();
+
+  return (
+    <div className="clients-table-card">
+      <table className="inventory-table clients-table client-reservations-table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Producto</th>
+            <th>Cantidad</th>
+            <th>Precio unitario</th>
+            <th>Total</th>
+            <th>Estado</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {reservations.map((reservation) => {
+            const firstItem = reservation.items?.[0];
+            const quantity = sumReservationItems(reservation);
+            const price = Number(firstItem?.price || 0);
+            const canCancel = isReservationCancellable(reservation);
+            return (
+              <tr key={reservation.id}>
+                <td>{reservation.createdAt ? dateFormatter.format(new Date(reservation.createdAt)) : '-'}</td>
+                <td>{reservationProducts(reservation)}</td>
+                <td>{quantity}</td>
+                <td>{moneyFormatter.format(price)}</td>
+                <td>{moneyFormatter.format(Number(reservation.total || quantity * price))}</td>
+                <td>
+                  <span className={`client-status client-status--${String(reservation.status || '').toLowerCase()}`}>
+                    {statusLabels[reservation.status] || reservation.status}
+                  </span>
+                </td>
+                <td>
+                  {canCancel ? (
+                    <button type="button" className="client-secondary-action" onClick={() => cancelReservation(reservation)} disabled={saving}>
+                      Cancelar
+                    </button>
+                  ) : null}
+                </td>
+              </tr>
+            );
+          })}
+          {!loading && reservations.length === 0 ? (
+            <tr>
+              <td colSpan={7} className="inventory-table__empty">
+                Todavia no tenes reservas
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
     </div>
   );
 }
 
+export function ClientReservationsPage() {
+  return (
+    <section className="clients-tab-panel">
+      <div className="clients-panel-header client-reservations-header">
+        <div>
+          <h2>Reservas</h2>
+          <p>Consulta tus reservas y realiza nuevos pedidos</p>
+        </div>
+        <Link to="/client/reservas/nueva" className="inventory-primary-action client-new-reservation-action">
+          <PackagePlus size={17} aria-hidden="true" />
+          <span>Nueva reserva</span>
+        </Link>
+      </div>
+
+      <ClientSummaryCards />
+
+      <div className="clients-panel-header client-history-header">
+        <div>
+          <h2>Historial de reservas</h2>
+        </div>
+        <TicketCheck size={28} className="client-panel-icon" aria-hidden="true" />
+      </div>
+
+      <ClientReservationHistory />
+    </section>
+  );
+}
+
+function ReservationQuantityInput({ disabled, max, onChange, value }) {
+  return (
+    <input
+      className="client-quantity-input"
+      disabled={disabled}
+      inputMode="numeric"
+      min="1"
+      max={max}
+      step="1"
+      type="number"
+      value={value}
+      onKeyDown={blockNonIntegerKeys}
+      onChange={(event) => isUnsignedIntegerInput(event.target.value) && onChange(event.target.value)}
+      aria-label="Cantidad a reservar"
+    />
+  );
+}
+
+function ReservableProductsTable({ onReserve, quantities, quantityErrors, setQuantity }) {
+  const {
+    filteredCatalog,
+    loading,
+    saving
+  } = useClientPanel();
+
+  return (
+    <div className="clients-table-card">
+      <table className="inventory-table clients-table client-products-table">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Categoria</th>
+            <th>Codigo</th>
+            <th>Precio</th>
+            <th>Stock disponible</th>
+            <th>Cantidad a reservar</th>
+            <th>Accion</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredCatalog.map((product) => {
+            const stock = Number(product.stock || 0);
+            const available = product.isActive && stock > 0;
+            const quantity = quantities[product.id] ?? '1';
+            return (
+              <tr key={product.id}>
+                <td>
+                  <strong>{product.name}</strong>
+                </td>
+                <td>{product.category || 'Sin categoria'}</td>
+                <td>{product.codigoBarras || product.sku || '-'}</td>
+                <td>{moneyFormatter.format(Number(product.price || 0))}</td>
+                <td>
+                  <span className={`client-status ${available ? 'client-status--active' : 'client-status--cancelled'}`}>
+                    {available ? stock : 'Sin stock'}
+                  </span>
+                </td>
+                <td>
+                  <ReservationQuantityInput
+                    disabled={!available || saving}
+                    max={stock}
+                    value={quantity}
+                    onChange={(nextValue) => setQuantity(product.id, nextValue)}
+                  />
+                  {quantityErrors[product.id] ? <span className="client-quantity-error">{quantityErrors[product.id]}</span> : null}
+                </td>
+                <td>
+                  <button type="button" className="inventory-primary-action" onClick={() => onReserve(product)} disabled={!available || saving}>
+                    {saving ? 'Reservando...' : 'Reservar'}
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+          {!loading && filteredCatalog.length === 0 ? (
+            <tr>
+              <td colSpan={7} className="inventory-table__empty">
+                No hay productos disponibles
+              </td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function NewReservationPage() {
+  const navigate = useNavigate();
+  const {
+    categories,
+    categoryFilter,
+    createReservation,
+    loading,
+    productQuery,
+    setCategoryFilter,
+    setProductQuery,
+    setShowAvailableOnly,
+    showAvailableOnly
+  } = useClientPanel();
+  const [quantities, setQuantities] = useState({});
+  const [quantityErrors, setQuantityErrors] = useState({});
+
+  const setQuantity = (productId, value) => {
+    setQuantities((current) => ({ ...current, [productId]: value }));
+    setQuantityErrors((current) => ({ ...current, [productId]: '' }));
+  };
+
+  const reserveProduct = async (product) => {
+    const quantityValue = quantities[product.id] ?? '1';
+    const quantity = Number(quantityValue);
+    if (!isPositiveInteger(quantityValue)) {
+      setQuantityErrors((current) => ({ ...current, [product.id]: 'Debe ser un entero mayor a cero' }));
+      return;
+    }
+    if (quantity > Number(product.stock || 0)) {
+      setQuantityErrors((current) => ({ ...current, [product.id]: 'No puede superar el stock' }));
+      return;
+    }
+
+    await createReservation(product, quantity);
+  };
+
+  return (
+    <section className="clients-tab-panel">
+      <div className="clients-panel-header">
+        <div>
+          <h2>Nueva reserva</h2>
+          <p>Selecciona productos disponibles para reservar</p>
+        </div>
+        <button type="button" className="client-back-action" onClick={() => navigate('/client/reservas')}>
+          <ArrowLeft size={17} aria-hidden="true" />
+          <span>Volver</span>
+        </button>
+      </div>
+
+      <section className="client-product-filters" aria-label="Filtros de productos">
+        <label className="clients-search">
+          <span>Buscar producto</span>
+          <div>
+            <Search size={17} aria-hidden="true" />
+            <input value={productQuery} onChange={(event) => setProductQuery(event.target.value)} placeholder="Nombre, categoria o codigo" />
+          </div>
+        </label>
+        <label className="client-filter-field">
+          <span>Categoria</span>
+          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+            {categories.map((category) => (
+              <option key={category} value={category}>
+                {category === 'ALL' ? 'Todas' : category}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="client-checkbox-filter">
+          <input type="checkbox" checked={showAvailableOnly} onChange={(event) => setShowAvailableOnly(event.target.checked)} />
+          <span>Solo disponibles</span>
+        </label>
+      </section>
+
+      {loading ? <p className="inventory-table__empty">Cargando productos...</p> : null}
+      <ReservableProductsTable
+        onReserve={reserveProduct}
+        quantities={quantities}
+        quantityErrors={quantityErrors}
+        setQuantity={setQuantity}
+      />
+    </section>
+  );
+}
+
+export function ClientBalancePage() {
+  const { balanceMovements, cardStatus, lastConsumption, lastRecharge, loading, visibleBalance } = useClientPanel();
+  const latestRecharges = balanceMovements.filter((movement) => movement.type === 'RECHARGE').slice(0, 5);
+  const latestConsumptions = balanceMovements.filter(isConsumptionMovement).slice(0, 5);
+
+  return (
+    <section className="clients-tab-panel">
+      <div className="clients-panel-header">
+        <div>
+          <h2>Saldo / Tarjeta</h2>
+          <p>Consulta de saldo y actividad reciente de tu cuenta.</p>
+        </div>
+        <Link to="/client/movimientos" className="inventory-primary-action">
+          Ver movimientos
+        </Link>
+      </div>
+
+      <article className="client-balance-card">
+        <span>Saldo disponible</span>
+        <strong>{moneyFormatter.format(visibleBalance)}</strong>
+      </article>
+
+      <section className="clients-metrics" aria-label="Resumen de saldo">
+        <article className="clients-metric">
+          <span>Ultima carga</span>
+          <strong>{lastRecharge?.createdAt ? dateFormatter.format(new Date(lastRecharge.createdAt)) : 'Sin cargas'}</strong>
+        </article>
+        <article className="clients-metric">
+          <span>Ultimo consumo</span>
+          <strong>{lastConsumption?.createdAt ? dateFormatter.format(new Date(lastConsumption.createdAt)) : 'Sin consumos'}</strong>
+        </article>
+        <article className="clients-metric">
+          <span>Estado de la tarjeta</span>
+          <strong>{cardStatus}</strong>
+        </article>
+      </section>
+
+      <section className="client-balance-lists">
+        <div className="clients-table-card">
+          <table className="inventory-table clients-table clients-table--compact">
+            <thead>
+              <tr>
+                <th>Ultimas cargas</th>
+                <th>Monto</th>
+                <th>Saldo resultante</th>
+              </tr>
+            </thead>
+            <tbody>
+              {latestRecharges.map((movement) => (
+                <tr key={movement.id}>
+                  <td>{movement.createdAt ? dateFormatter.format(new Date(movement.createdAt)) : '-'}</td>
+                  <td>+ {moneyFormatter.format(Number(movement.amount || 0))}</td>
+                  <td>{movement.balanceAfter === null || movement.balanceAfter === undefined ? '-' : moneyFormatter.format(Number(movement.balanceAfter || 0))}</td>
+                </tr>
+              ))}
+              {!loading && latestRecharges.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="inventory-table__empty">
+                    Todavia no hay cargas
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="clients-table-card">
+          <table className="inventory-table clients-table clients-table--compact">
+            <thead>
+              <tr>
+                <th>Ultimos consumos</th>
+                <th>Monto</th>
+                <th>Saldo resultante</th>
+              </tr>
+            </thead>
+            <tbody>
+              {latestConsumptions.map((movement) => {
+                const delta = movementDelta(movement);
+                return (
+                  <tr key={movement.id}>
+                    <td>{movement.createdAt ? dateFormatter.format(new Date(movement.createdAt)) : '-'}</td>
+                    <td>{delta >= 0 ? '+' : '-'} {moneyFormatter.format(Math.abs(delta))}</td>
+                    <td>{movement.balanceAfter === null || movement.balanceAfter === undefined ? '-' : moneyFormatter.format(Number(movement.balanceAfter || 0))}</td>
+                  </tr>
+                );
+              })}
+              {!loading && latestConsumptions.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="inventory-table__empty">
+                    Todavia no hay consumos
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  );
+}
+
+export function ClientMovementsPage() {
+  const { balanceMovements, loading, reservations } = useClientPanel();
+  const movements = useMemo(() => {
+    const accountRows = balanceMovements.map((movement) => {
+      const delta = movementDelta(movement);
+      const isRecharge = movement.type === 'RECHARGE';
+      return {
+        id: `account-${movement.id}`,
+        date: movement.createdAt,
+        type: movement.type,
+        detail: isRecharge ? movement.notes || 'Carga realizada por administracion' : movement.notes || 'Operacion de cuenta',
+        amount: `${delta >= 0 ? '+' : '-'} ${moneyFormatter.format(Math.abs(delta))}`,
+        balanceAfter: movement.balanceAfter === null || movement.balanceAfter === undefined ? '-' : moneyFormatter.format(Number(movement.balanceAfter || 0))
+      };
+    });
+
+    const reservationRows = reservations.flatMap((reservation) => {
+      const quantity = sumReservationItems(reservation);
+      const total = moneyFormatter.format(Number(reservation.total || 0));
+      const base = {
+        date: reservation.createdAt,
+        detail: reservationProducts(reservation),
+        amount: `${quantity} u. / ${total}`,
+        balanceAfter: '-'
+      };
+      const rows = [{ ...base, id: `reservation-created-${reservation.id}`, type: 'RESERVATION_CREATED' }];
+      if (reservation.status && reservation.status !== 'ACTIVE') {
+        rows.push({
+          ...base,
+          id: `reservation-status-${reservation.id}`,
+          date: reservation.updatedAt || reservation.createdAt,
+          type: `RESERVATION_${reservation.status}`
+        });
+      }
+      return rows;
+    });
+
+    return [...accountRows, ...reservationRows].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  }, [balanceMovements, reservations]);
+
+  return (
+    <section className="clients-tab-panel">
+      <div className="clients-panel-header">
+        <div>
+          <h2>Movimientos</h2>
+          <p>Consulta tus consumos, cargas y operaciones de tu cuenta</p>
+        </div>
+      </div>
+
+      <div className="clients-table-card">
+        <table className="inventory-table clients-table client-movements-table">
+          <thead>
+            <tr>
+              <th>Fecha y hora</th>
+              <th>Tipo</th>
+              <th>Detalle</th>
+              <th>Importe / cantidad</th>
+              <th>Saldo resultante</th>
+            </tr>
+          </thead>
+          <tbody>
+            {movements.map((movement) => (
+              <tr key={movement.id}>
+                <td>{movement.date ? dateFormatter.format(new Date(movement.date)) : '-'}</td>
+                <td>
+                  <span className={`client-status client-status--${String(movement.type || '').toLowerCase()}`}>
+                    {statusLabels[movement.type] || movement.type}
+                  </span>
+                </td>
+                <td>{movement.detail || '-'}</td>
+                <td>{movement.amount || '-'}</td>
+                <td>{movement.balanceAfter}</td>
+              </tr>
+            ))}
+            {!loading && movements.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="inventory-table__empty">
+                  Todavia no hay movimientos para mostrar
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+export function ClientNotificationsPage() {
+  const { loading, notifications } = useClientPanel();
+
+  return (
+    <section className="clients-tab-panel">
+      <div className="clients-panel-header">
+        <div>
+          <h2>Notificaciones</h2>
+          <p>Avisos y novedades vinculadas a tu cuenta.</p>
+        </div>
+        <Bell size={28} className="client-panel-icon" aria-hidden="true" />
+      </div>
+
+      <div className="client-notifications">
+        {notifications.map((notification) => (
+          <article key={notification.id} className={`client-notification${notification.read ? '' : ' is-unread'}`}>
+            <div>
+              <strong>{notification.title || 'Notificacion'}</strong>
+              <p>{notification.message}</p>
+            </div>
+            <span>{notification.createdAt ? dateFormatter.format(new Date(notification.createdAt)) : '-'}</span>
+          </article>
+        ))}
+        {!loading && notifications.length === 0 ? <p className="inventory-table__empty">No tenes notificaciones por ahora</p> : null}
+      </div>
+    </section>
+  );
+}
+
 export default function ClientPanel() {
-  const [activeTab, setActiveTab] = useState('products');
+  const navigate = useNavigate();
   const [dashboard, setDashboard] = useState({ summary: { balance: 0, activeReservations: 0, productRecords: 0, unreadNotifications: 0 } });
   const [reservations, setReservations] = useState([]);
   const [catalog, setCatalog] = useState([]);
@@ -76,21 +572,18 @@ export default function ClientPanel() {
   const [notifications, setNotifications] = useState([]);
   const [productQuery, setProductQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
-  const [selectedProduct, setSelectedProduct] = useState(null);
-  const [reserveQuantity, setReserveQuantity] = useState(1);
+  const [showAvailableOnly, setShowAvailableOnly] = useState(false);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [drawer, setDrawer] = useState(null);
 
   const summary = dashboard.summary || {};
   const activeReservations = useMemo(() => reservations.filter((reservation) => reservation.status === 'ACTIVE').length, [reservations]);
-  const unreadNotifications = useMemo(() => notifications.filter((notification) => !notification.read).length, [notifications]);
   const visibleBalance = Number(balanceData?.account?.balance ?? summary.balance ?? 0);
   const balanceMovements = balanceData?.movements || [];
   const lastRecharge = balanceMovements.find((movement) => movement.type === 'RECHARGE');
-  const lastConsumption = balanceMovements.find((movement) => ['CONSUMPTION', 'PAYMENT'].includes(movement.type));
+  const lastConsumption = balanceMovements.find(isConsumptionMovement);
   const visibleCards = dashboard.clients || [];
   const cardStatus = !visibleCards.some((client) => client.cardId)
     ? 'Sin tarjeta asociada'
@@ -108,9 +601,10 @@ export default function ClientPanel() {
     return catalog.filter((product) => {
       const matchesQuery = !query || [product.name, product.category, product.codigoBarras, product.sku].filter(Boolean).some((value) => normalize(value).includes(query));
       const matchesCategory = categoryFilter === 'ALL' || product.category === categoryFilter;
-      return matchesQuery && matchesCategory;
+      const matchesAvailability = !showAvailableOnly || Number(product.stock || 0) > 0;
+      return matchesQuery && matchesCategory && matchesAvailability;
     });
-  }, [catalog, categoryFilter, productQuery]);
+  }, [catalog, categoryFilter, productQuery, showAvailableOnly]);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -141,7 +635,7 @@ export default function ClientPanel() {
     loadDashboard();
   }, [loadDashboard]);
 
-  const refreshAfterOperation = async () => {
+  const refreshAfterOperation = useCallback(async () => {
     const [meRes, reservationsRes, productsRes, historyRes, balanceRes] = await Promise.all([
       api.get('/client/me'),
       api.get('/client/me/reservations'),
@@ -154,47 +648,37 @@ export default function ClientPanel() {
     setCatalog(productsRes.data || []);
     setProductHistory(historyRes.data || []);
     setBalanceData(balanceRes.data || { account: { balance: 0 }, movements: [] });
-  };
+  }, []);
 
-  const openReserveDrawer = (product) => {
-    setSelectedProduct(product);
-    setReserveQuantity(1);
-    setError('');
-    setMessage('');
-    setDrawer('reserve');
-  };
-
-  const confirmReservation = async (event) => {
-    event.preventDefault();
-    if (!selectedProduct) return;
-    const quantity = Number(reserveQuantity);
-    if (!isPositiveInteger(reserveQuantity)) {
-      setError('La cantidad debe ser un número entero mayor a cero');
-      return;
+  const createReservation = useCallback(async (product, quantity) => {
+    if (!product) return false;
+    if (!isPositiveInteger(quantity)) {
+      setError('La cantidad debe ser un numero entero mayor a cero');
+      return false;
     }
-    if (quantity > Number(selectedProduct.stock || 0)) {
+    if (Number(quantity) > Number(product.stock || 0)) {
       setError('No hay stock suficiente para esa cantidad');
-      return;
+      return false;
     }
 
     setSaving(true);
     setError('');
     setMessage('');
     try {
-      await api.post('/client/me/reservations', { productId: selectedProduct.id, quantity });
+      await api.post('/client/me/reservations', { productId: product.id, quantity: Number(quantity) });
       setMessage('Reserva creada correctamente');
-      setDrawer(null);
-      setSelectedProduct(null);
       await refreshAfterOperation();
-      setActiveTab('reservations');
+      navigate('/client/reservas');
+      return true;
     } catch (err) {
       setError(err?.response?.data?.message || 'No se pudo crear la reserva');
+      return false;
     } finally {
       setSaving(false);
     }
-  };
+  }, [navigate, refreshAfterOperation]);
 
-  const cancelReservation = async (reservation) => {
+  const cancelReservation = useCallback(async (reservation) => {
     if (saving) return;
     setSaving(true);
     setError('');
@@ -208,341 +692,78 @@ export default function ClientPanel() {
     } finally {
       setSaving(false);
     }
-  };
+  }, [refreshAfterOperation, saving]);
+
+  const contextValue = useMemo(
+    () => ({
+      activeReservations,
+      balanceMovements,
+      cancelReservation,
+      cardStatus,
+      categories,
+      categoryFilter,
+      createReservation,
+      dashboard,
+      filteredCatalog,
+      lastConsumption,
+      lastRecharge,
+      loading,
+      notifications,
+      productHistory,
+      productQuery,
+      reservations,
+      saving,
+      setCategoryFilter,
+      setProductQuery,
+      setShowAvailableOnly,
+      showAvailableOnly,
+      visibleBalance
+    }),
+    [
+      activeReservations,
+      balanceMovements,
+      cardStatus,
+      cancelReservation,
+      categories,
+      categoryFilter,
+      createReservation,
+      dashboard,
+      filteredCatalog,
+      lastConsumption,
+      lastRecharge,
+      loading,
+      notifications,
+      productHistory,
+      productQuery,
+      reservations,
+      saving,
+      showAvailableOnly,
+      visibleBalance
+    ]
+  );
 
   return (
-    <div className="page clients-page client-panel-page">
-      <header className="clients-header">
-        <div>
-          <p className="clients-kicker">Mi cuenta</p>
-          <h1>Panel de cliente</h1>
-          <p>Consultá tus reservas, productos y saldo disponible</p>
+    <ClientPanelContext.Provider value={contextValue}>
+      <div className="page clients-page client-panel-page">
+        <header className="clients-header">
+          <div>
+            <p className="clients-kicker">Mi cuenta</p>
+            <h1>Panel de cliente</h1>
+            <p>Consulta tus reservas, saldo y movimientos.</p>
+          </div>
+          <button type="button" className="sales-refresh" onClick={loadDashboard} disabled={loading}>
+            {loading ? <LoaderCircle size={16} className="sales-action-spinner" aria-hidden="true" /> : <RefreshCw size={16} aria-hidden="true" />}
+            <span>Actualizar</span>
+          </button>
+        </header>
+
+        {error ? <p className="inventory-error">{error}</p> : null}
+        {message ? <p className="inventory-success">{message}</p> : null}
+
+        <div className="card clients-workspace">
+          <Outlet />
         </div>
-        <button type="button" className="sales-refresh" onClick={loadDashboard} disabled={loading}>
-          {loading ? <LoaderCircle size={16} className="sales-action-spinner" aria-hidden="true" /> : <RefreshCw size={16} aria-hidden="true" />}
-          <span>Actualizar</span>
-        </button>
-      </header>
-
-      {error ? <p className="inventory-error">{error}</p> : null}
-      {message ? <p className="inventory-success">{message}</p> : null}
-
-      <section className="clients-metrics" aria-label="Resumen de mi cuenta">
-        <article className="clients-metric clients-metric--money">
-          <span>Saldo disponible</span>
-          <strong>{moneyFormatter.format(visibleBalance)}</strong>
-        </article>
-        <article className="clients-metric">
-          <span>Reservas activas</span>
-          <strong>{activeReservations || summary.activeReservations || 0}</strong>
-        </article>
-        <article className="clients-metric clients-metric--balance">
-          <span>Productos comprados/reservados</span>
-          <strong>{productHistory.length || summary.productRecords || 0}</strong>
-        </article>
-        <article className="clients-metric">
-          <span>Notificaciones pendientes</span>
-          <strong>{unreadNotifications || summary.unreadNotifications || 0}</strong>
-        </article>
-      </section>
-
-      <div className="card clients-workspace">
-        <nav className="clients-tabs" aria-label="Secciones del panel de cliente">
-          {tabs.map((tab) => (
-            <button key={tab.key} type="button" className={activeTab === tab.key ? 'active' : ''} onClick={() => setActiveTab(tab.key)}>
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-
-        {activeTab === 'reservations' ? (
-          <section className="clients-tab-panel">
-            <div className="clients-panel-header">
-              <div>
-                <h2>Reservas</h2>
-                <p>Seguimiento de productos reservados para tu cuenta.</p>
-              </div>
-              <TicketCheck size={28} className="client-panel-icon" aria-hidden="true" />
-            </div>
-
-            <div className="clients-table-card">
-              <table className="inventory-table clients-table">
-                <thead>
-                  <tr>
-                    <th>Producto</th>
-                    <th>Cantidad</th>
-                    <th>Precio unitario</th>
-                    <th>Total</th>
-                    <th>Fecha</th>
-                    <th>Estado</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reservations.map((reservation) => {
-                    const firstItem = reservation.items?.[0];
-                    const quantity = sumReservationItems(reservation);
-                    const price = Number(firstItem?.price || 0);
-                    return (
-                      <tr key={reservation.id}>
-                        <td>{reservationProducts(reservation)}</td>
-                        <td>{quantity}</td>
-                        <td>{moneyFormatter.format(price)}</td>
-                        <td>{moneyFormatter.format(Number(reservation.total || quantity * price))}</td>
-                        <td>{reservation.createdAt ? dateFormatter.format(new Date(reservation.createdAt)) : '-'}</td>
-                        <td>
-                          <span className={`client-status client-status--${String(reservation.status || '').toLowerCase()}`}>
-                            {statusLabels[reservation.status] || reservation.status}
-                          </span>
-                        </td>
-                        <td>
-                          {reservation.status === 'ACTIVE' ? (
-                            <button type="button" className="client-secondary-action" onClick={() => cancelReservation(reservation)} disabled={saving}>
-                              Cancelar
-                            </button>
-                          ) : null}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {!loading && reservations.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="inventory-table__empty">
-                        Todavía no tenés reservas
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        ) : null}
-
-        {activeTab === 'products' ? (
-          <section className="clients-tab-panel">
-            <div className="clients-panel-header">
-              <div>
-                <h2>Productos</h2>
-                <p>Catálogo disponible para reservar desde tu cuenta.</p>
-              </div>
-              <PackageCheck size={28} className="client-panel-icon" aria-hidden="true" />
-            </div>
-
-            <section className="client-product-filters" aria-label="Filtros de productos">
-              <label className="clients-search">
-                <span>Buscar producto</span>
-                <div>
-                  <Search size={17} aria-hidden="true" />
-                  <input value={productQuery} onChange={(event) => setProductQuery(event.target.value)} placeholder="Nombre, categoría o código" />
-                </div>
-              </label>
-              <label className="client-filter-field">
-                <span>Categoría</span>
-                <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-                  {categories.map((category) => (
-                    <option key={category} value={category}>
-                      {category === 'ALL' ? 'Todas' : category}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </section>
-
-            <div className="client-product-grid">
-              {filteredCatalog.map((product) => {
-                const stock = Number(product.stock || 0);
-                const available = product.isActive && stock > 0;
-                return (
-                  <article key={product.id} className="client-product-card">
-                    <div className="client-product-card__header">
-                      <div>
-                        <strong>{product.name}</strong>
-                        <span>{product.category || 'Sin categoría'}</span>
-                      </div>
-                      <span className={`client-status ${available ? 'client-status--active' : 'client-status--cancelled'}`}>{available ? 'Disponible' : 'Sin stock'}</span>
-                    </div>
-                    <dl>
-                      <div>
-                        <dt>Precio</dt>
-                        <dd>{moneyFormatter.format(Number(product.price || 0))}</dd>
-                      </div>
-                      <div>
-                        <dt>Stock</dt>
-                        <dd>{stock}</dd>
-                      </div>
-                      <div>
-                        <dt>Código</dt>
-                        <dd>{product.codigoBarras || product.sku || '-'}</dd>
-                      </div>
-                    </dl>
-                    <button type="button" className="inventory-primary-action" onClick={() => openReserveDrawer(product)} disabled={!available}>
-                      {available ? 'Reservar' : 'Sin stock'}
-                    </button>
-                  </article>
-                );
-              })}
-              {!loading && filteredCatalog.length === 0 ? <p className="inventory-table__empty">No hay productos disponibles</p> : null}
-            </div>
-
-            <div className="clients-panel-header client-history-header">
-              <div>
-                <h2>Historial</h2>
-                <p>Productos comprados o reservados asociados a tu cuenta.</p>
-              </div>
-            </div>
-            <div className="clients-table-card">
-              <table className="inventory-table clients-table">
-                <thead>
-                  <tr>
-                    <th>Producto</th>
-                    <th>Cantidad</th>
-                    <th>Precio</th>
-                    <th>Fecha</th>
-                    <th>Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {productHistory.map((record) => (
-                    <tr key={record.id}>
-                      <td>{record.product?.name || 'Producto'}</td>
-                      <td>{record.quantity}</td>
-                      <td>{moneyFormatter.format(Number(record.price || 0))}</td>
-                      <td>{record.date ? dateFormatter.format(new Date(record.date)) : '-'}</td>
-                      <td>
-                        <span className={`client-status client-status--${String(record.status || '').toLowerCase()}`}>
-                          {statusLabels[record.status] || record.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {!loading && productHistory.length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="inventory-table__empty">
-                        Todavía no hay productos asociados a tu cuenta
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        ) : null}
-
-        {activeTab === 'balance' ? (
-          <section className="clients-tab-panel">
-            <div className="clients-panel-header">
-              <div>
-                <h2>Saldo / Tarjeta</h2>
-                <p>Consulta de saldo y movimientos de tu cuenta.</p>
-              </div>
-            </div>
-
-            <article className="client-balance-card">
-              <span>Saldo disponible</span>
-              <strong>{moneyFormatter.format(visibleBalance)}</strong>
-            </article>
-
-            <section className="clients-metrics" aria-label="Resumen de saldo">
-              <article className="clients-metric">
-                <span>Última carga</span>
-                <strong>{lastRecharge?.createdAt ? dateFormatter.format(new Date(lastRecharge.createdAt)) : 'Sin cargas'}</strong>
-              </article>
-              <article className="clients-metric">
-                <span>Último consumo</span>
-                <strong>{lastConsumption?.createdAt ? dateFormatter.format(new Date(lastConsumption.createdAt)) : 'Sin consumos'}</strong>
-              </article>
-              <article className="clients-metric">
-                <span>Estado de la tarjeta</span>
-                <strong>{cardStatus}</strong>
-              </article>
-            </section>
-
-            <div className="clients-table-card">
-              <table className="inventory-table clients-table">
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Tipo</th>
-                    <th>Monto</th>
-                    <th>Saldo resultante</th>
-                    <th>Observación</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {balanceMovements.map((movement) => (
-                    <tr key={movement.id}>
-                      <td>{movement.createdAt ? dateFormatter.format(new Date(movement.createdAt)) : '-'}</td>
-                      <td>
-                        <span className={`client-status client-status--${String(movement.type || '').toLowerCase()}`}>
-                          {statusLabels[movement.type] || movement.type}
-                        </span>
-                      </td>
-                      <td>{movementDelta(movement) >= 0 ? '+' : '-'} {moneyFormatter.format(Math.abs(movementDelta(movement)))}</td>
-                      <td>{movement.balanceAfter === null || movement.balanceAfter === undefined ? '-' : moneyFormatter.format(Number(movement.balanceAfter || 0))}</td>
-                      <td>{movement.notes || '-'}</td>
-                    </tr>
-                  ))}
-                  {!loading && !balanceMovements.length ? (
-                    <tr>
-                      <td colSpan={5} className="inventory-table__empty">
-                        Todavía no hay movimientos de saldo
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        ) : null}
-
-        {activeTab === 'notifications' ? (
-          <section className="clients-tab-panel">
-            <div className="clients-panel-header">
-              <div>
-                <h2>Notificaciones</h2>
-                <p>Avisos y novedades vinculadas a tu cuenta.</p>
-              </div>
-              <Bell size={28} className="client-panel-icon" aria-hidden="true" />
-            </div>
-
-            <div className="client-notifications">
-              {notifications.map((notification) => (
-                <article key={notification.id} className={`client-notification${notification.read ? '' : ' is-unread'}`}>
-                  <div>
-                    <strong>{notification.title || 'Notificación'}</strong>
-                    <p>{notification.message}</p>
-                  </div>
-                  <span>{notification.createdAt ? dateFormatter.format(new Date(notification.createdAt)) : '-'}</span>
-                </article>
-              ))}
-              {!loading && notifications.length === 0 ? <p className="inventory-table__empty">No tenés notificaciones por ahora</p> : null}
-            </div>
-          </section>
-        ) : null}
       </div>
-
-      {drawer === 'reserve' && selectedProduct ? (
-        <Drawer title="Confirmar reserva" onClose={() => setDrawer(null)}>
-          <form className="client-form" onSubmit={confirmReservation}>
-            <div className="client-drawer-summary">
-              <strong>{selectedProduct.name}</strong>
-              <span>{moneyFormatter.format(Number(selectedProduct.price || 0))} · Stock {selectedProduct.stock}</span>
-            </div>
-            <label>
-              Cantidad a reservar
-              <input min="1" max={selectedProduct.stock} step="1" type="number" value={reserveQuantity} onKeyDown={blockNonIntegerKeys} onChange={(event) => isUnsignedIntegerInput(event.target.value) && setReserveQuantity(event.target.value)} />
-            </label>
-            <div className="client-drawer-total">
-              <span>Total estimado</span>
-              <strong>{moneyFormatter.format(Number(selectedProduct.price || 0) * Number(reserveQuantity || 0))}</strong>
-            </div>
-            <button type="submit" className="inventory-primary-action" disabled={saving}>
-              {saving ? 'Reservando...' : 'Confirmar reserva'}
-            </button>
-          </form>
-        </Drawer>
-      ) : null}
-
-    </div>
+    </ClientPanelContext.Provider>
   );
 }

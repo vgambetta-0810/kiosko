@@ -1,6 +1,8 @@
 import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import InventoryMetrics from '../components/inventory/InventoryMetrics';
+import InventoryMobileFilters from '../components/inventory/InventoryMobileFilters';
+import InventoryMobileList from '../components/inventory/InventoryMobileList';
 import InventoryPagination from '../components/inventory/InventoryPagination';
 import InventoryTable from '../components/inventory/InventoryTable';
 import InventoryToolbar from '../components/inventory/InventoryToolbar';
@@ -52,6 +54,21 @@ export default function StockDashboard() {
     [navigate]
   );
 
+  const filterProps = {
+    filters: inventoryFilters.filters,
+    categories: inventoryFilters.categories,
+    onFilterChange: inventoryFilters.updateFilter,
+    onNewProduct: openCreateDrawer
+  };
+
+  const listProps = {
+    products: inventoryFilters.paginatedProducts,
+    onEdit: openEditDrawer,
+    onDuplicate: openDuplicateDrawer,
+    onHistory: handleHistory,
+    loading
+  };
+
   return (
     <div className="page inventory-page">
       <header className="inventory-header">
@@ -68,22 +85,24 @@ export default function StockDashboard() {
       <InventoryMetrics metrics={metrics} className="inventory-metrics--desktop" />
 
       <div className="card inventory-workspace">
-        <InventoryToolbar
-          filters={inventoryFilters.filters}
-          categories={inventoryFilters.categories}
-          onFilterChange={inventoryFilters.updateFilter}
-          onNewProduct={openCreateDrawer}
-        />
+        {/* Desktop toolbar — hidden on mobile via CSS */}
+        <InventoryToolbar {...filterProps} />
+
+        {/* Mobile filters — hidden on desktop via CSS */}
+        <InventoryMobileFilters {...filterProps} />
+
         <InventoryMetrics metrics={metrics} compact className="inventory-metrics--mobile" />
+
+        {/* Desktop table — hidden on mobile via CSS */}
         <InventoryTable
-          products={inventoryFilters.paginatedProducts}
+          {...listProps}
           sort={inventoryFilters.sort}
           onSort={inventoryFilters.updateSort}
-          onEdit={openEditDrawer}
-          onDuplicate={openDuplicateDrawer}
-          onHistory={handleHistory}
-          loading={loading}
         />
+
+        {/* Mobile card list — hidden on desktop via CSS */}
+        <InventoryMobileList {...listProps} />
+
         <InventoryPagination
           page={inventoryFilters.page}
           pageSize={inventoryFilters.pageSize}

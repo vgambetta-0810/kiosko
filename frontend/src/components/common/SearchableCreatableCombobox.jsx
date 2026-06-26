@@ -30,6 +30,13 @@ function SearchableCreatableCombobox({
   required = false,
   allowCreate = true,
   allowClear = true,
+  clearSelectionOnInput = false,
+  createDescription = 'Crear nueva opcion',
+  createLabel,
+  createOnNoResultsOnly = false,
+  filterOptions = true,
+  keepQueryOnBlur = false,
+  loadingLabel,
   showSearchIcon = true,
   getOptionLabel = defaultGetOptionLabel,
   getOptionValue = defaultGetOptionValue,
@@ -38,6 +45,7 @@ function SearchableCreatableCombobox({
   onSelect,
   onCreate,
   onClear,
+  onInputChange,
   onEnterNext,
   inputRef
 }) {
@@ -55,6 +63,7 @@ function SearchableCreatableCombobox({
   const selectedValue = getOptionValue(selectedOption);
   const normalizedQuery = normalize(query);
   const filteredOptions = useMemo(() => {
+    if (!filterOptions) return options;
     const key = getKey(normalizedQuery);
     const seen = new Set();
 
@@ -66,15 +75,16 @@ function SearchableCreatableCombobox({
       seen.add(optionKey);
       return !key || getKey(labelValue).includes(key);
     });
-  }, [getOptionLabel, getOptionValue, normalizedQuery, options]);
+  }, [filterOptions, getOptionLabel, getOptionValue, normalizedQuery, options]);
   const hasExactMatch = filteredOptions.some((option) => getKey(getOptionLabel(option)) === getKey(normalizedQuery));
   const menuItems = useMemo(() => {
     const items = filteredOptions.map((option) => ({ type: 'option', option }));
-    if (allowCreate && normalizedQuery && !hasExactMatch) {
+    const canCreate = createOnNoResultsOnly ? !items.length : !hasExactMatch;
+    if (allowCreate && normalizedQuery && canCreate) {
       items.unshift({ type: 'create', option: { name: normalizedQuery } });
     }
     return items;
-  }, [allowCreate, filteredOptions, hasExactMatch, normalizedQuery]);
+  }, [allowCreate, createOnNoResultsOnly, filteredOptions, hasExactMatch, normalizedQuery]);
 
   useEffect(() => {
     setQuery(getOptionLabel(selectedOption));
@@ -121,7 +131,7 @@ function SearchableCreatableCombobox({
 
   useEffect(() => {
     if (!isOpen || !onSearch) return undefined;
-    const timeoutId = window.setTimeout(() => onSearch(normalizedQuery), normalizedQuery ? 220 : 0);
+    const timeoutId = window.setTimeout(() => onSearch(normalizedQuery), normalizedQuery ? 280 : 0);
     return () => window.clearTimeout(timeoutId);
   }, [isOpen, normalizedQuery, onSearch]);
 
@@ -143,7 +153,9 @@ function SearchableCreatableCombobox({
   };
 
   const selectOption = (option) => {
-    setQuery(getOptionLabel(option));
+    const nextQuery = getOptionLabel(option);
+    setQuery(nextQuery);
+    onInputChange?.(nextQuery);
     setLocalError('');
     onSelect(option);
     closeMenu();
@@ -162,8 +174,9 @@ function SearchableCreatableCombobox({
     try {
       const created = await onCreate(normalizedQuery);
       if (created) selectOption(created);
+      else closeMenu();
     } catch (createError) {
-      setLocalError(createError?.response?.data?.message || createError.message || 'No se pudo crear la opción');
+      setLocalError(createError?.response?.data?.message || createError.message || 'No se pudo crear la opcion');
     } finally {
       setCreating(false);
     }
@@ -224,7 +237,7 @@ function SearchableCreatableCombobox({
           {busy ? (
             <div className="entity-combobox__status">
               <LoaderCircle size={16} className="entity-combobox__spinner" aria-hidden="true" />
-              {creating ? 'Creando opción...' : 'Cargando opciones...'}
+              {creating ? 'Creando opcion...' : loadingLabel || 'Cargando opciones...'}
             </div>
           ) : null}
           {feedback ? <div className="entity-combobox__status entity-combobox__status--error">{feedback}</div> : null}
@@ -253,8 +266,8 @@ function SearchableCreatableCombobox({
                       {item.type === 'create' ? <Plus size={16} aria-hidden="true" /> : <Check size={16} aria-hidden="true" />}
                     </span>
                     <span className="entity-combobox__option-copy">
-                      <strong>{item.type === 'create' ? `Crear “${normalizedQuery}”` : optionLabel}</strong>
-                      <small>{item.type === 'create' ? 'Crear nueva opción' : getOptionDescription(option)}</small>
+                      <strong>{item.type === 'create' ? (createLabel ? createLabel(normalizedQuery) : `Crear "${normalizedQuery}"`) : optionLabel}</strong>
+                      <small>{item.type === 'create' ? createDescription : getOptionDescription(option)}</small>
                     </span>
                     {isSelected ? <Check size={17} className="entity-combobox__selected-check" aria-hidden="true" /> : null}
                   </button>
@@ -296,10 +309,13 @@ function SearchableCreatableCombobox({
           placeholder={placeholder}
           value={query}
           onChange={(event) => {
-            setQuery(event.target.value);
+            const nextQuery = event.target.value;
+            setQuery(nextQuery);
+            onInputChange?.(nextQuery);
+            if (clearSelectionOnInput && selectedOption) onClear?.();
             setLocalError('');
             setIsOpen(true);
-            setActiveIndex(event.target.value.trim() ? 0 : -1);
+            setActiveIndex(nextQuery.trim() ? 0 : -1);
           }}
           onFocus={(event) => {
             setIsOpen(true);
@@ -309,7 +325,11 @@ function SearchableCreatableCombobox({
           onBlur={(event) => {
             const nextTarget = event.relatedTarget;
             if (!rootRef.current?.contains(nextTarget) && !menuRef.current?.contains(nextTarget)) {
-              setQuery(getOptionLabel(selectedOption));
+              if (!keepQueryOnBlur || selectedOption) {
+                const nextQuery = getOptionLabel(selectedOption);
+                setQuery(nextQuery);
+                onInputChange?.(nextQuery);
+              }
               closeMenu();
             }
           }}
@@ -326,6 +346,7 @@ function SearchableCreatableCombobox({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => {
                 setQuery('');
+                onInputChange?.('');
                 onClear?.();
                 internalInputRef.current?.focus();
               }}

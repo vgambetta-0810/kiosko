@@ -1,13 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CreditCard, LoaderCircle, Plus, RefreshCw, Search, Users } from 'lucide-react';
+import { CreditCard, Link2, LoaderCircle, Plus, RefreshCw, Search } from 'lucide-react';
 import SearchableCreatableCombobox from '../components/common/SearchableCreatableCombobox';
 import { api } from '../services/api';
 import { blockNonIntegerKeys, isPositiveInteger, isUnsignedIntegerInput } from '../utils/quantity';
 
 const tabs = [
+  { key: 'directory', label: 'Listado' },
   { key: 'reservations', label: 'Reservas' },
   { key: 'products', label: 'Productos' },
   { key: 'balance', label: 'Saldo / Tarjeta' }
+];
+
+const identityFilters = [
+  { key: 'ALL', label: 'Todos' },
+  { key: 'WITH_ACCOUNT', label: 'Con cuenta' },
+  { key: 'WITHOUT_ACCOUNT', label: 'Sin cuenta' },
+  { key: 'POSSIBLE_DUPLICATE', label: 'Posibles duplicados' },
+  { key: 'MERGED', label: 'Fusionados' }
 ];
 
 const reservationStatuses = [
@@ -34,6 +43,13 @@ const statusLabels = {
   DEBT: 'Deuda',
   DEDUCTION: 'Descuento',
   ADJUSTMENT: 'Ajuste'
+};
+
+const identityStatusLabels = {
+  WITH_ACCOUNT: 'Con cuenta',
+  WITHOUT_ACCOUNT: 'Sin cuenta',
+  POSSIBLE_DUPLICATE: 'Posible duplicado',
+  MERGED: 'Fusionado'
 };
 
 const moneyFormatter = new Intl.NumberFormat('es-AR', {
@@ -93,7 +109,7 @@ function Drawer({ title, children, onClose }) {
 }
 
 export default function ClientsPage() {
-  const [activeTab, setActiveTab] = useState('reservations');
+  const [activeTab, setActiveTab] = useState('directory');
   const [clients, setClients] = useState([]);
   const [summary, setSummary] = useState({ totalClients: 0, clientsWithBalance: 0, activeReservations: 0, totalBalance: 0 });
   const [products, setProducts] = useState([]);
@@ -101,6 +117,7 @@ export default function ClientsPage() {
   const [productRecords, setProductRecords] = useState([]);
   const [balanceData, setBalanceData] = useState(null);
   const [clientQuery, setClientQuery] = useState('');
+  const [identityFilter, setIdentityFilter] = useState('ALL');
   const [selectedClient, setSelectedClient] = useState(null);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [reservationStatus, setReservationStatus] = useState('ALL');
@@ -110,6 +127,7 @@ export default function ClientsPage() {
   const [drawer, setDrawer] = useState(null);
   const [clientForm, setClientForm] = useState(emptyClientForm);
   const [clientMatchDialog, setClientMatchDialog] = useState({ open: false, matches: [], payload: null });
+  const [linkDialog, setLinkDialog] = useState({ open: false, client: null, clientSummary: null, candidates: [], selected: null, query: '', loading: false });
   const [reservationForm, setReservationForm] = useState(emptyReservationForm);
   const [balanceForm, setBalanceForm] = useState(emptyBalanceForm);
   const [saving, setSaving] = useState(false);
@@ -126,11 +144,15 @@ export default function ClientsPage() {
   }, [clientQuery, clients]);
 
   const loadClients = useCallback(async (query = '') => {
-    const { data } = await api.get('/clients', { params: query ? { q: query } : undefined });
+    const params = {
+      ...(query ? { q: query } : {}),
+      ...(identityFilter !== 'ALL' ? { identityStatus: identityFilter } : {})
+    };
+    const { data } = await api.get('/clients', { params: Object.keys(params).length ? params : undefined });
     setClients(data.clients || []);
     setSummary(data.summary || {});
     return data.clients || [];
-  }, []);
+  }, [identityFilter]);
 
   const loadProducts = useCallback(async () => {
     const { data } = await api.get('/products');
@@ -248,6 +270,47 @@ export default function ClientsPage() {
       await reloadCurrentTab();
     } catch (err) {
       setError(err?.response?.data?.message || 'No se pudo resolver la coincidencia');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const loadLinkCandidates = async (client, query = '') => {
+    setLinkDialog((current) => ({ ...current, client, query, loading: true, open: true, selected: null }));
+    try {
+      const { data } = await api.get(`/clients/${client.id}/link-candidates`, { params: query ? { q: query } : undefined });
+      const candidates = data.candidates || [];
+      setLinkDialog({
+        open: true,
+        client: data.client || client,
+        clientSummary: data.clientSummary || null,
+        candidates,
+        selected: candidates.find((candidate) => candidate.suggested) || candidates[0] || null,
+        query,
+        loading: false
+      });
+    } catch (err) {
+      setLinkDialog({ open: false, client: null, clientSummary: null, candidates: [], selected: null, query: '', loading: false });
+      setError(err?.response?.data?.message || 'No se pudieron cargar las cuentas para vincular');
+    }
+  };
+
+  const confirmLinkUser = async () => {
+    if (!linkDialog.client || !linkDialog.selected) return;
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const { data } = await api.post(`/clients/${linkDialog.client.id}/link-user`, {
+        userId: linkDialog.selected.id,
+        mergeClientId: linkDialog.selected.id
+      });
+      setSelectedClient(data);
+      setLinkDialog({ open: false, client: null, clientSummary: null, candidates: [], selected: null, query: '', loading: false });
+      setMessage('Cuenta vinculada y datos fusionados correctamente');
+      await reloadCurrentTab();
+    } catch (err) {
+      setError(err?.response?.data?.message || 'No se pudo vincular la cuenta');
     } finally {
       setSaving(false);
     }
@@ -413,6 +476,88 @@ export default function ClientsPage() {
             </button>
           ))}
         </nav>
+
+        {activeTab === 'directory' ? (
+          <section className="clients-tab-panel">
+            <div className="clients-panel-header">
+              <div>
+                <h2>Listado de clientes</h2>
+                <p>{summary.possibleDuplicates ? `${summary.possibleDuplicates} posibles duplicados para revisar.` : 'Clientes registrados y fichas creadas manualmente.'}</p>
+              </div>
+              <div className="clients-status-tabs" role="group" aria-label="Estado de cuenta">
+                {identityFilters.map((option) => (
+                  <button key={option.key} type="button" className={identityFilter === option.key ? 'active' : ''} onClick={() => setIdentityFilter(option.key)}>
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="clients-table-card">
+              <table className="inventory-table clients-table client-directory-table">
+                <thead>
+                  <tr>
+                    <th>Cliente</th>
+                    <th>Contacto</th>
+                    <th>Estado</th>
+                    <th>Saldo</th>
+                    <th>Coincidencias</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredClients.map((client) => (
+                    <tr key={client.id}>
+                      <td>
+                        <strong>{client.name}</strong>
+                        <span>{client.cardId ? `Tarjeta ${client.cardId}` : 'Sin tarjeta'}</span>
+                      </td>
+                      <td>
+                        <strong>{client.email || 'Sin email'}</strong>
+                        <span>{client.phone || 'Sin telefono'}</span>
+                      </td>
+                      <td>
+                        <span className={`client-status client-status--${String(client.identityStatus || '').toLowerCase()}`}>
+                          {identityStatusLabels[client.identityStatus] || 'Sin cuenta'}
+                        </span>
+                      </td>
+                      <td>{moneyFormatter.format(Number(client.balance || 0))}</td>
+                      <td>{client.possibleDuplicate ? (client.duplicateReasons || []).join(', ') || 'Datos similares' : '-'}</td>
+                      <td>
+                        <div className="clients-row-actions">
+                          {!client.hasAccessAccount && !client.mergedIntoClientId ? (
+                            <button type="button" onClick={() => loadLinkCandidates(client)}>
+                              <Link2 size={15} aria-hidden="true" />
+                              <span>Vincular cuenta</span>
+                            </button>
+                          ) : null}
+                          {!client.mergedIntoClientId ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedClient(client);
+                                setActiveTab('balance');
+                              }}
+                            >
+                              Ver saldo
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {!loading && filteredClients.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="inventory-table__empty">
+                        No hay clientes para los filtros seleccionados
+                      </td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        ) : null}
 
         {activeTab === 'reservations' ? (
           <section className="clients-tab-panel">
@@ -652,6 +797,103 @@ export default function ClientsPage() {
             </button>
           </form>
         </Drawer>
+      ) : null}
+
+      {linkDialog.open ? (
+        <div className="client-match-backdrop" role="presentation" onMouseDown={() => setLinkDialog({ open: false, client: null, clientSummary: null, candidates: [], selected: null, query: '', loading: false })}>
+          <section className="client-match-dialog client-link-dialog" role="dialog" aria-modal="true" aria-label="Vincular cuenta" onMouseDown={(event) => event.stopPropagation()}>
+            <header className="client-match-dialog__header">
+              <div>
+                <h2>Vincular cuenta</h2>
+                <p>SeleccionÃ¡ la cuenta registrada que corresponde a {linkDialog.client?.name}.</p>
+              </div>
+              <button type="button" onClick={() => setLinkDialog({ open: false, client: null, clientSummary: null, candidates: [], selected: null, query: '', loading: false })} aria-label="Cancelar">
+                X
+              </button>
+            </header>
+
+            <form
+              className="client-link-search"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (linkDialog.client) loadLinkCandidates(linkDialog.client, linkDialog.query);
+              }}
+            >
+              <label>
+                Buscar cuenta
+                <input value={linkDialog.query} onChange={(event) => setLinkDialog((current) => ({ ...current, query: event.target.value }))} placeholder="Nombre o email" />
+              </label>
+              <button type="submit" disabled={linkDialog.loading}>
+                {linkDialog.loading ? 'Buscando...' : 'Buscar'}
+              </button>
+            </form>
+
+            <div className="client-link-grid">
+              <div className="client-match-list">
+                {linkDialog.candidates.map((candidate) => (
+                  <button
+                    key={candidate.id}
+                    type="button"
+                    className={`client-link-candidate ${linkDialog.selected?.id === candidate.id ? 'is-selected' : ''}`}
+                    onClick={() => setLinkDialog((current) => ({ ...current, selected: candidate }))}
+                  >
+                    <span>
+                      <strong>{candidate.name}</strong>
+                      <small>{candidate.email || 'Sin email'}</small>
+                    </span>
+                    {candidate.suggested ? <em>Coincidencia sugerida</em> : null}
+                    <small>{[candidate.phone, candidate.matchReasons?.join(', ')].filter(Boolean).join(' - ') || 'Sin datos extra'}</small>
+                  </button>
+                ))}
+                {!linkDialog.loading && linkDialog.candidates.length === 0 ? <p className="client-link-empty">No hay cuentas registradas disponibles para vincular.</p> : null}
+              </div>
+
+              <aside className="client-link-summary" aria-label="Resumen de vinculacion">
+                <h3>ConfirmaciÃ³n</h3>
+                <dl>
+                  <div>
+                    <dt>Cliente existente</dt>
+                    <dd>{linkDialog.client?.name || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>Telefono</dt>
+                    <dd>{linkDialog.client?.phone || '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>Saldo</dt>
+                    <dd>{moneyFormatter.format(Number(linkDialog.clientSummary?.balance || linkDialog.client?.balance || 0))}</dd>
+                  </div>
+                  <div>
+                    <dt>Reservas</dt>
+                    <dd>{linkDialog.clientSummary?.reservationCount ?? '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>Movimientos</dt>
+                    <dd>{linkDialog.clientSummary?.movementCount ?? '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>Cuenta a vincular</dt>
+                    <dd>{linkDialog.selected ? `${linkDialog.selected.name} - ${linkDialog.selected.email}` : '-'}</dd>
+                  </div>
+                  <div>
+                    <dt>Registro</dt>
+                    <dd>{linkDialog.selected?.createdAt ? dateFormatter.format(new Date(linkDialog.selected.createdAt)) : '-'}</dd>
+                  </div>
+                </dl>
+                <p>Esta acciÃ³n asociarÃ¡ la cuenta seleccionada con este cliente. El cliente podrÃ¡ ver sus reservas, saldo y movimientos desde su panel.</p>
+              </aside>
+            </div>
+
+            <footer className="client-match-actions">
+              <button type="button" onClick={() => setLinkDialog({ open: false, client: null, clientSummary: null, candidates: [], selected: null, query: '', loading: false })} disabled={saving}>
+                Cancelar
+              </button>
+              <button type="button" className="inventory-primary-action" onClick={confirmLinkUser} disabled={saving || !linkDialog.selected}>
+                {saving ? 'Vinculando...' : 'Confirmar vinculaciÃ³n'}
+              </button>
+            </footer>
+          </section>
+        </div>
       ) : null}
 
       {clientMatchDialog.open ? (

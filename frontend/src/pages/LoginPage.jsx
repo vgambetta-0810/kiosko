@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '../context/AuthContext';
 
 export default function LoginPage() {
   const { login, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -23,7 +24,7 @@ export default function LoginPage() {
   const routeByRole = (role) => {
     if (role === 'ADMIN') return '/';
     if (role === 'SELLER') return '/ventas';
-    return '/client';
+    return '/client/reservas';
   };
 
   const onSubmit = async (e) => {
@@ -66,6 +67,9 @@ export default function LoginPage() {
           <p className="auth-error" role="alert">
             {error}
           </p>
+        ) : null}
+        {location.state?.switchAccount ? (
+          <p className="auth-success">Sesion cerrada. Inicia con otra cuenta para continuar.</p>
         ) : null}
 
         <label className="auth-field">

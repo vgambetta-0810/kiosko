@@ -1,23 +1,58 @@
 const { createHash } = require('crypto');
-const { Op, User, Account, AccountMovement, Reservation, Sale, Product } = require('../models');
+const { Op, User, Account, AccountMovement, Reservation, Sale, Product, Notification, ClientMergeAudit } = require('../models');
 const { addMovement, getOrCreateAccount } = require('./account.service');
 const { withTransaction } = require('./stock.service');
 const ApiError = require('../utils/ApiError');
 const { normalizeOptionName } = require('../utils/saleOptions');
 
-const CLIENT_ATTRIBUTES = ['id', 'name', 'email', 'phone', 'cardId', 'isActive', 'createdAt', 'updatedAt'];
+const CLIENT_ATTRIBUTES = ['id', 'name', 'email', 'phone', 'cardId', 'isActive', 'mergedIntoClientId', 'mergedAt', 'createdAt', 'updatedAt'];
 const CLIENT_MATCH_ATTRIBUTES = [...CLIENT_ATTRIBUTES, 'password', 'googleId', 'role'];
 
 const publicEmail = (email) => (email?.endsWith('@clientes.local') ? '' : email || '');
-const hasAccessAccount = (client) => Boolean(client.password || client.googleId || !client.email?.endsWith('@clientes.local'));
+const hasAccessAccount = (client) => Boolean(client.password || client.googleId);
+
+const normalizeIdentityKey = (value) =>
+  normalizeOptionName(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('es');
+
+const normalizeIdentityCompact = (value) => normalizeIdentityKey(value).replace(/[^a-z0-9]+/g, '');
+
+const namesAreSimilar = (left = '', right = '') => {
+  const a = normalizeIdentityCompact(left);
+  const b = normalizeIdentityCompact(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (Math.min(a.length, b.length) >= 4 && (a.startsWith(b) || b.startsWith(a))) return true;
+  const leftTokens = normalizeIdentityKey(left).split(/\s+/).filter((token) => token.length >= 4);
+  const rightTokens = new Set(normalizeIdentityKey(right).split(/\s+/).filter((token) => token.length >= 4));
+  return leftTokens.some((token) => rightTokens.has(token));
+};
+
+const matchClientIdentity = (target, candidate) => {
+  const reasons = [];
+  const targetEmail = publicEmail(target.email).toLocaleLowerCase('es');
+  const candidateEmail = publicEmail(candidate.email).toLocaleLowerCase('es');
+  if (targetEmail && candidateEmail && targetEmail === candidateEmail) reasons.push('email');
+  if (target.phone && candidate.phone && normalizeIdentityCompact(target.phone) === normalizeIdentityCompact(candidate.phone)) reasons.push('telefono');
+  if (target.cardId && candidate.cardId && normalizeIdentityCompact(target.cardId) === normalizeIdentityCompact(candidate.cardId)) reasons.push('documento');
+  if (target.name && candidate.name && namesAreSimilar(target.name, candidate.name)) reasons.push(normalizeIdentityCompact(target.name) === normalizeIdentityCompact(candidate.name) ? 'nombre' : 'nombre similar');
+  return reasons;
+};
 
 const normalizeClient = async (client) => {
   const raw = client.toJSON ? client.toJSON() : client;
   const account = await getOrCreateAccount('CLIENT', raw.id);
+  const accessAccount = hasAccessAccount(raw);
   return {
     ...raw,
     email: publicEmail(raw.email),
-    balance: Number(account.balance || 0)
+    balance: Number(account.balance || 0),
+    hasAccessAccount: accessAccount,
+    identityStatus: raw.mergedIntoClientId ? 'MERGED' : accessAccount ? 'WITH_ACCOUNT' : 'WITHOUT_ACCOUNT',
+    possibleDuplicate: false,
+    duplicateReasons: []
   };
 };
 
@@ -54,6 +89,53 @@ const getSalesCountByClient = async (clientIds, transaction) => {
   return new Map(rows.map((row) => [row.clientId, Number(row.salesCount || 0)]));
 };
 
+const getReservationCountByClient = async (clientIds, transaction) => {
+  if (!clientIds.length) return new Map();
+  const rows = await Reservation.findAll({
+    where: { clientId: clientIds },
+    attributes: ['clientId', [Reservation.sequelize.fn('COUNT', Reservation.sequelize.col('id')), 'reservationCount']],
+    group: ['clientId'],
+    raw: true,
+    transaction
+  });
+  return new Map(rows.map((row) => [row.clientId, Number(row.reservationCount || 0)]));
+};
+
+const getMovementCountByClient = async (clientIds, transaction) => {
+  if (!clientIds.length) return new Map();
+  const accounts = await Account.findAll({ where: { ownerType: 'CLIENT', ownerId: clientIds }, transaction });
+  if (!accounts.length) return new Map();
+  const accountOwnerById = new Map(accounts.map((account) => [account.id, account.ownerId]));
+  const rows = await AccountMovement.findAll({
+    where: { accountId: accounts.map((account) => account.id) },
+    attributes: ['accountId', [AccountMovement.sequelize.fn('COUNT', AccountMovement.sequelize.col('id')), 'movementCount']],
+    group: ['accountId'],
+    raw: true,
+    transaction
+  });
+  const result = new Map();
+  for (const row of rows) {
+    const ownerId = accountOwnerById.get(row.accountId);
+    result.set(ownerId, (result.get(ownerId) || 0) + Number(row.movementCount || 0));
+  }
+  return result;
+};
+
+const getClientActivitySummary = async (clientId, transaction) => {
+  const account = await getOrCreateAccount('CLIENT', clientId, transaction);
+  const [reservationCount, salesCount, movementCount] = await Promise.all([
+    Reservation.count({ where: { clientId }, transaction }),
+    Sale.count({ where: { clientId, deletedAt: null }, transaction }),
+    AccountMovement.count({ where: { accountId: account.id }, transaction })
+  ]);
+  return {
+    reservationCount,
+    salesCount,
+    movementCount,
+    balance: Number(account.balance || 0)
+  };
+};
+
 const formatMatchCandidate = (client, salesCount = 0) => {
   const raw = client.toJSON ? client.toJSON() : client;
   return {
@@ -64,7 +146,8 @@ const formatMatchCandidate = (client, salesCount = 0) => {
     cardId: raw.cardId || '',
     createdAt: raw.createdAt,
     salesCount,
-    hasAccessAccount: hasAccessAccount(raw)
+    hasAccessAccount: hasAccessAccount(raw),
+    identityStatus: raw.mergedIntoClientId ? 'MERGED' : hasAccessAccount(raw) ? 'WITH_ACCOUNT' : 'WITHOUT_ACCOUNT'
   };
 };
 
@@ -83,7 +166,7 @@ exports.findClientMatches = async (payload, options = {}) => {
   if (!clauses.length) return [];
 
   const clients = await User.findAll({
-    where: { role: 'CLIENT', [Op.or]: clauses },
+    where: { role: 'CLIENT', mergedIntoClientId: null, [Op.or]: clauses },
     attributes: CLIENT_MATCH_ATTRIBUTES,
     order: [['createdAt', 'ASC']],
     transaction: options.transaction
@@ -110,7 +193,7 @@ const mergeClientFields = (client, { name, email, phone, cardId, isActive = true
 };
 
 const linkExistingClient = async (clientId, payload, transaction) => {
-  const client = await User.findOne({ where: { id: clientId, role: 'CLIENT' }, transaction });
+  const client = await User.findOne({ where: { id: clientId, role: 'CLIENT', mergedIntoClientId: null }, transaction });
   if (!client) throw new ApiError(404, 'Cliente a vincular no encontrado');
 
   const { email } = cleanIdentityInput(payload);
@@ -125,10 +208,11 @@ const linkExistingClient = async (clientId, payload, transaction) => {
   return client.reload({ transaction });
 };
 
-exports.listClients = async ({ q = '' } = {}) => {
+exports.listClients = async ({ q = '', identityStatus = '' } = {}) => {
   const query = normalizeOptionName(q);
   const where = {
     role: 'CLIENT',
+    ...(identityStatus === 'MERGED' ? { mergedIntoClientId: { [Op.ne]: null } } : { mergedIntoClientId: null }),
     ...(query
       ? {
           [Op.or]: [
@@ -141,8 +225,10 @@ exports.listClients = async ({ q = '' } = {}) => {
       : {})
   };
 
-  const clients = await User.findAll({ where, attributes: CLIENT_ATTRIBUTES, order: [['name', 'ASC']] });
-  return Promise.all(clients.map(normalizeClient));
+  const clients = await User.findAll({ where, attributes: CLIENT_MATCH_ATTRIBUTES, order: [['name', 'ASC']] });
+  const normalizedClients = addDuplicateIndicators(await Promise.all(clients.map(normalizeClient)));
+  if (!identityStatus || identityStatus === 'ALL' || identityStatus === 'MERGED') return normalizedClients;
+  return normalizedClients.filter((client) => client.identityStatus === identityStatus);
 };
 
 exports.createClient = async ({ name, email = '', phone = '', cardId = '', isActive = true, duplicateAction = '', linkClientId = '' }) => {
@@ -193,8 +279,177 @@ exports.linkClientIdentity = async ({ clientId, payload }) => {
   return normalizeClient(linked);
 };
 
+exports.listUnlinkedUsers = async ({ q = '' } = {}) => {
+  const query = normalizeIdentityKey(q);
+  const users = await User.findAll({
+    where: { role: 'CLIENT', mergedIntoClientId: null, isActive: true },
+    attributes: CLIENT_MATCH_ATTRIBUTES,
+    order: [['createdAt', 'DESC']]
+  });
+  return users
+    .filter((user) => hasAccessAccount(user))
+    .map((user) => formatMatchCandidate(user))
+    .filter((user) => {
+      if (!query) return true;
+      return [user.name, user.email, user.phone, user.cardId].filter(Boolean).some((value) => normalizeIdentityKey(value).includes(query));
+    });
+};
+
+exports.getLinkCandidates = async ({ clientId, q = '' }) => {
+  const target = await User.findOne({ where: { id: clientId, role: 'CLIENT', mergedIntoClientId: null }, attributes: CLIENT_MATCH_ATTRIBUTES });
+  if (!target) throw new ApiError(404, 'Cliente no encontrado');
+
+  const query = normalizeIdentityKey(q);
+  const clients = await User.findAll({
+    where: { role: 'CLIENT', id: { [Op.ne]: clientId }, mergedIntoClientId: null, isActive: true },
+    attributes: CLIENT_MATCH_ATTRIBUTES,
+    order: [['createdAt', 'DESC']]
+  });
+  const candidates = clients
+    .filter((client) => hasAccessAccount(client))
+    .map((client) => {
+      const raw = client.toJSON();
+      const reasons = matchClientIdentity(target, raw);
+      return {
+        ...formatMatchCandidate(raw),
+        matchReasons: reasons,
+        suggested: reasons.length > 0
+      };
+    })
+    .filter((candidate) => {
+      if (!query) return true;
+      return [candidate.name, candidate.email, candidate.phone, candidate.cardId].filter(Boolean).some((value) => normalizeIdentityKey(value).includes(query));
+    })
+    .sort((a, b) => Number(b.suggested) - Number(a.suggested) || new Date(b.createdAt) - new Date(a.createdAt));
+
+  const ids = candidates.map((candidate) => candidate.id);
+  const [salesCountByClient, reservationCountByClient, movementCountByClient] = await Promise.all([
+    getSalesCountByClient(ids),
+    getReservationCountByClient(ids),
+    getMovementCountByClient(ids)
+  ]);
+
+  return {
+    client: await normalizeClient(target),
+    clientSummary: await getClientActivitySummary(target.id),
+    candidates: candidates.map((candidate) => ({
+      ...candidate,
+      salesCount: salesCountByClient.get(candidate.id) || 0,
+      reservationCount: reservationCountByClient.get(candidate.id) || 0,
+      movementCount: movementCountByClient.get(candidate.id) || 0
+    }))
+  };
+};
+
+const createMergedEmail = (clientId) => `cliente-fusionado-${clientId}@clientes.local`;
+
+exports.linkUserAccount = async ({ clientId, userId, mergeClientId = '', adminId }) => {
+  const linked = await withTransaction(async (transaction) => {
+    const finalClient = await User.findOne({ where: { id: clientId, role: 'CLIENT', mergedIntoClientId: null }, transaction });
+    if (!finalClient) throw new ApiError(404, 'Cliente destino no encontrado');
+
+    const linkedUser = await User.findOne({ where: { id: userId, role: 'CLIENT', mergedIntoClientId: null }, transaction });
+    if (!linkedUser) throw new ApiError(404, 'Cuenta de cliente no encontrada');
+    if (finalClient.id === linkedUser.id) throw new ApiError(400, 'La cuenta ya corresponde a este cliente');
+    if (!hasAccessAccount(linkedUser)) throw new ApiError(400, 'La cuenta seleccionada no tiene acceso de usuario para vincular');
+    if (hasAccessAccount(finalClient)) throw new ApiError(409, 'El cliente destino ya tiene una cuenta asociada');
+
+    const duplicateClientId = mergeClientId || linkedUser.id;
+    if (duplicateClientId !== linkedUser.id) {
+      const duplicate = await User.findOne({ where: { id: duplicateClientId, role: 'CLIENT', mergedIntoClientId: null }, transaction });
+      if (!duplicate) throw new ApiError(404, 'Cliente duplicado a fusionar no encontrado');
+      if (duplicate.id !== linkedUser.id) throw new ApiError(400, 'En este modelo la cuenta y el cliente duplicado deben ser el mismo registro');
+    }
+
+    const finalPublicEmail = publicEmail(finalClient.email);
+    const linkedPublicEmail = publicEmail(linkedUser.email);
+    const linkedPassword = linkedUser.password;
+    const linkedGoogleId = linkedUser.googleId;
+    if (finalPublicEmail && linkedPublicEmail && finalPublicEmail !== linkedPublicEmail) {
+      throw new ApiError(409, 'El cliente destino ya tiene un email diferente');
+    }
+
+    const before = {
+      finalClient: {
+        id: finalClient.id,
+        name: finalClient.name,
+        email: publicEmail(finalClient.email),
+        phone: finalClient.phone,
+        cardId: finalClient.cardId
+      },
+      linkedUser: {
+        id: linkedUser.id,
+        name: linkedUser.name,
+        email: publicEmail(linkedUser.email),
+        phone: linkedUser.phone,
+        cardId: linkedUser.cardId
+      },
+      finalSummary: await getClientActivitySummary(finalClient.id, transaction),
+      linkedSummary: await getClientActivitySummary(linkedUser.id, transaction)
+    };
+
+    const finalAccount = await getOrCreateAccount('CLIENT', finalClient.id, transaction);
+    const sourceAccount = await Account.findOne({ where: { ownerType: 'CLIENT', ownerId: linkedUser.id }, transaction });
+    if (sourceAccount && sourceAccount.id !== finalAccount.id) {
+      await AccountMovement.update({ accountId: finalAccount.id }, { where: { accountId: sourceAccount.id }, transaction });
+      finalAccount.balance = Number(finalAccount.balance || 0) + Number(sourceAccount.balance || 0);
+      await finalAccount.save({ transaction });
+      await sourceAccount.destroy({ transaction });
+    }
+
+    await Promise.all([
+      Reservation.update({ clientId: finalClient.id }, { where: { clientId: linkedUser.id }, transaction }),
+      Sale.update({ clientId: finalClient.id }, { where: { clientId: linkedUser.id }, transaction }),
+      Notification.update({ userId: finalClient.id }, { where: { userId: linkedUser.id }, transaction })
+    ]);
+
+    await linkedUser.update(
+      {
+        email: createMergedEmail(linkedUser.id),
+        password: null,
+        googleId: null,
+        isActive: false,
+        mergedIntoClientId: finalClient.id,
+        mergedAt: new Date()
+      },
+      { transaction }
+    );
+
+    await finalClient.update(
+      {
+        name: finalClient.name || linkedUser.name,
+        email: linkedPublicEmail || finalClient.email,
+        password: linkedPassword || finalClient.password,
+        googleId: linkedGoogleId || finalClient.googleId,
+        phone: finalClient.phone || linkedUser.phone || null,
+        cardId: finalClient.cardId || linkedUser.cardId || null,
+        age: finalClient.age || linkedUser.age || null,
+        parentId: finalClient.parentId || linkedUser.parentId || null,
+        isActive: true
+      },
+      { transaction }
+    );
+
+    await ClientMergeAudit.create(
+      {
+        adminId,
+        finalClientId: finalClient.id,
+        linkedUserId: linkedUser.id,
+        mergedClientId: linkedUser.id,
+        action: 'LINK_USER',
+        snapshot: before
+      },
+      { transaction }
+    );
+
+    return finalClient.reload({ transaction });
+  });
+
+  return normalizeClient(linked);
+};
+
 exports.updateClient = async (id, payload) => {
-  const client = await User.findOne({ where: { id, role: 'CLIENT' } });
+  const client = await User.findOne({ where: { id, role: 'CLIENT', mergedIntoClientId: null } });
   if (!client) throw new ApiError(404, 'Cliente no encontrado');
 
   const updates = {};
@@ -210,23 +465,26 @@ exports.updateClient = async (id, payload) => {
 };
 
 exports.getSummary = async () => {
-  const [totalClients, activeReservations, accounts] = await Promise.all([
-    User.count({ where: { role: 'CLIENT', isActive: true } }),
+  const [totalClients, activeReservations, accounts, visibleClients] = await Promise.all([
+    User.count({ where: { role: 'CLIENT', isActive: true, mergedIntoClientId: null } }),
     Reservation.count({ where: { status: 'ACTIVE' } }),
-    Account.findAll({ where: { ownerType: 'CLIENT' } })
+    Account.findAll({ where: { ownerType: 'CLIENT' } }),
+    User.findAll({ where: { role: 'CLIENT', mergedIntoClientId: null }, attributes: CLIENT_MATCH_ATTRIBUTES })
   ]);
 
   const balances = accounts.map((account) => Number(account.balance || 0));
+  const clientsWithDuplicates = addDuplicateIndicators(visibleClients.map((client) => ({ ...client.toJSON(), email: publicEmail(client.email), hasAccessAccount: hasAccessAccount(client) })));
   return {
     totalClients,
     clientsWithBalance: balances.filter((balance) => balance > 0).length,
     activeReservations,
-    totalBalance: balances.filter((balance) => balance > 0).reduce((sum, balance) => sum + balance, 0)
+    totalBalance: balances.filter((balance) => balance > 0).reduce((sum, balance) => sum + balance, 0),
+    possibleDuplicates: clientsWithDuplicates.filter((client) => client.possibleDuplicate).length
   };
 };
 
 exports.getBalanceMovements = async (clientId) => {
-  const client = await User.findOne({ where: { id: clientId, role: 'CLIENT' }, attributes: CLIENT_ATTRIBUTES });
+  const client = await User.findOne({ where: { id: clientId, role: 'CLIENT', mergedIntoClientId: null }, attributes: CLIENT_ATTRIBUTES });
   if (!client) throw new ApiError(404, 'Cliente no encontrado');
   const account = await getOrCreateAccount('CLIENT', clientId);
   const movements = await AccountMovement.findAll({
@@ -238,7 +496,7 @@ exports.getBalanceMovements = async (clientId) => {
 };
 
 exports.chargeBalance = async ({ clientId, amount, paymentMethod, notes = '', createdBy }) => {
-  const client = await User.findOne({ where: { id: clientId, role: 'CLIENT' } });
+  const client = await User.findOne({ where: { id: clientId, role: 'CLIENT', mergedIntoClientId: null } });
   if (!client) throw new ApiError(404, 'Cliente no encontrado');
 
   return withTransaction((session) =>
@@ -254,8 +512,26 @@ exports.chargeBalance = async ({ clientId, amount, paymentMethod, notes = '', cr
   );
 };
 
+const addDuplicateIndicators = (clients) =>
+  clients.map((client) => {
+    if (client.mergedIntoClientId) return { ...client, identityStatus: 'MERGED' };
+
+    const matches = clients
+      .filter((candidate) => candidate.id !== client.id && !candidate.mergedIntoClientId)
+      .map((candidate) => ({ candidate, reasons: matchClientIdentity(client, candidate) }))
+      .filter(({ candidate, reasons }) => reasons.length && (client.hasAccessAccount !== candidate.hasAccessAccount || !client.hasAccessAccount));
+
+    if (!matches.length) return client;
+    return {
+      ...client,
+      identityStatus: client.hasAccessAccount ? 'WITH_ACCOUNT' : 'POSSIBLE_DUPLICATE',
+      possibleDuplicate: true,
+      duplicateReasons: [...new Set(matches.flatMap((match) => match.reasons))]
+    };
+  });
+
 exports.modifyBalance = async ({ clientId, operation, amount, paymentMethod = '', notes = '', createdBy }) => {
-  const client = await User.findOne({ where: { id: clientId, role: 'CLIENT' } });
+  const client = await User.findOne({ where: { id: clientId, role: 'CLIENT', mergedIntoClientId: null } });
   if (!client) throw new ApiError(404, 'Cliente no encontrado');
 
   return withTransaction(async (session) => {
